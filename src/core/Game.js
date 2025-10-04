@@ -10,7 +10,10 @@ class Game {
         this.lastTime = 0;
         this.deltaTime = 0;
         this.isRunning = false;
+        this.isInitialized = false;
         this.debugMode = false;
+        this.shipDebugMode = false; // Disabled for testing animation (will auto-enable after last waypoint)
+        this.animationLooping = false; // Animation plays once
         
         // Game state
         this.gameState = {
@@ -39,10 +42,10 @@ class Game {
             await this.loadAssets();
             
             // Create initial game objects
-            this.createInitialObjects();
+            await this.createInitialObjects();
             
-            // Start game loop
-            this.start();
+            // Mark as initialized
+            this.isInitialized = true;
             
             console.log('Game initialized successfully!');
             
@@ -172,14 +175,17 @@ class Game {
         }
     }
 
-    createInitialObjects() {
+    async createInitialObjects() {
         // Create a refractive glass sphere
         this.createGlassSphere();
         
         // Create accretion disk planes
         this.createAccretionDisk();
         
-        console.log('Glass sphere and accretion disk created');
+        // Create ship (async)
+        await this.createShip();
+        
+        console.log('Glass sphere, accretion disk, and ship created');
     }
 
     createGlassSphere() {
@@ -503,6 +509,370 @@ class Game {
         this.diskCover = diskCover;
     }
 
+    async createShip() {
+        try {
+            // Try to load the GLB model
+            const gltf = await this.assetLoader.loadGLTF('assets/models/base_ship.glb');
+            
+            // Get the ship model from the loaded GLTF
+            const shipModel = gltf.scene;
+            
+            // Position and scale the ship
+            shipModel.scale.setScalar(1.0); // Adjust scale as needed
+            shipModel.position.set(-50, 20, -30);
+            shipModel.rotation.y = Math.PI / 4; // Point towards center
+            
+            // Enable shadows
+            shipModel.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+            
+            this.scene.add(shipModel);
+            
+        // Store ship reference
+        this.ship = shipModel;
+        
+        // Set initial position
+        this.ship.position.set(-27.34, 9.33, -8.64);
+        this.ship.rotation.set(0.000, -2.146, 0.000);
+        
+        this.shipAnimation = {
+            isAnimating: false,
+            startTime: 0,
+            currentWaypoint: 0,
+            waypoints: [
+                {
+                    position: new THREE.Vector3(-27.34, 9.33, -8.64),
+                    rotation: new THREE.Euler(0.000, -2.146, 0.000),
+                    duration: 1.5, // seconds to reach this waypoint from previous
+                    cameraTrack: false // camera stays static
+                },
+                {
+                    position: new THREE.Vector3(0.33, 5.00, 10.02),
+                    rotation: new THREE.Euler(0.000, -2.146, 0.000),
+                    duration: 0.5,
+                    cameraTrack: true // camera starts tracking ship
+                },
+                {
+                    position: new THREE.Vector3(7.68, 5.00, 13.69),
+                    rotation: new THREE.Euler(0.000, -2.413, 0.000),
+                    duration: 1.0,
+                    cameraTrack: true // camera continues tracking
+                },
+                {
+                    position: new THREE.Vector3(5.68, 5.66, 25.35),
+                    rotation: new THREE.Euler(0.000, -2.548, 0.000),
+                    duration: 1.5,
+                    cameraTrack: true // camera continues tracking
+                }
+            ],
+            initialCameraPosition: new THREE.Vector3(0, 8, 15),
+            initialCameraLookAt: new THREE.Vector3(0, 0, 0)
+        };
+            
+            console.log('Ship model loaded successfully from GLB file');
+            
+        } catch (error) {
+            console.warn('Failed to load ship model, using procedural fallback:', error);
+            // Fallback to procedural ship
+            this.createProceduralShip();
+        }
+    }
+
+    createProceduralShip() {
+        // Create a procedural ship using Three.js primitives as fallback
+        const shipGroup = new THREE.Group();
+        
+        // Main hull (elongated box)
+        const hullGeometry = new THREE.BoxGeometry(4, 1, 8);
+        const hullMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x666666,
+            shininess: 100,
+            specular: 0x333333
+        });
+        const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+        hull.position.set(0, 0, 0);
+        shipGroup.add(hull);
+        
+        // Cockpit (smaller box on top)
+        const cockpitGeometry = new THREE.BoxGeometry(2, 0.8, 3);
+        const cockpitMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x444444,
+            shininess: 150,
+            specular: 0x222222
+        });
+        const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
+        cockpit.position.set(0, 0.9, -1);
+        shipGroup.add(cockpit);
+        
+        // Wings (flat boxes)
+        const wingGeometry = new THREE.BoxGeometry(8, 0.2, 2);
+        const wingMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x555555,
+            shininess: 80,
+            specular: 0x333333
+        });
+        
+        const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
+        leftWing.position.set(0, -0.4, 0);
+        shipGroup.add(leftWing);
+        
+        // Engine pods (cylinders)
+        const engineGeometry = new THREE.CylinderGeometry(0.3, 0.3, 2, 8);
+        const engineMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x333333,
+            shininess: 200,
+            specular: 0x111111
+        });
+        
+        const leftEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+        leftEngine.position.set(-2, -0.5, 2);
+        leftEngine.rotation.z = Math.PI / 2;
+        shipGroup.add(leftEngine);
+        
+        const rightEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+        rightEngine.position.set(2, -0.5, 2);
+        rightEngine.rotation.z = Math.PI / 2;
+        shipGroup.add(rightEngine);
+        
+        // Position and scale the ship
+        shipGroup.scale.setScalar(0.5); // Scale down
+        shipGroup.position.set(-50, 20, -30);
+        shipGroup.rotation.y = Math.PI / 4; // Point towards center
+        
+        // Enable shadows
+        shipGroup.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+        
+        this.scene.add(shipGroup);
+        
+        // Store ship reference
+        this.ship = shipGroup;
+        
+        // Set initial position
+        this.ship.position.set(-27.34, 9.33, -8.64);
+        this.ship.rotation.set(0.000, -2.146, 0.000);
+        
+        this.shipAnimation = {
+            isAnimating: false,
+            startTime: 0,
+            currentWaypoint: 0,
+            waypoints: [
+                {
+                    position: new THREE.Vector3(-27.34, 9.33, -8.64),
+                    rotation: new THREE.Euler(0.000, -2.146, 0.000),
+                    duration: 1.5, // seconds to reach this waypoint from previous
+                    cameraTrack: false // camera stays static
+                },
+                {
+                    position: new THREE.Vector3(0.33, 5.00, 10.02),
+                    rotation: new THREE.Euler(0.000, -2.146, 0.000),
+                    duration: 0.5,
+                    cameraTrack: true // camera starts tracking ship
+                },
+                {
+                    position: new THREE.Vector3(7.68, 5.00, 13.69),
+                    rotation: new THREE.Euler(0.000, -2.413, 0.000),
+                    duration: 1.0,
+                    cameraTrack: true // camera continues tracking
+                },
+                {
+                    position: new THREE.Vector3(5.68, 5.66, 25.35),
+                    rotation: new THREE.Euler(0.000, -2.548, 0.000),
+                    duration: 1.5,
+                    cameraTrack: true // camera continues tracking
+                }
+            ],
+            initialCameraPosition: new THREE.Vector3(0, 8, 15),
+            initialCameraLookAt: new THREE.Vector3(0, 0, 0)
+        };
+        
+        console.log('Procedural ship created successfully');
+    }
+
+    createShipPlaceholder() {
+        // Create a simple ship placeholder
+        const shipGeometry = new THREE.BoxGeometry(2, 0.5, 4);
+        const shipMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xaaaaaa,
+            transparent: false,
+            opacity: 1.0,
+            shininess: 100,
+            specular: 0x666666
+        });
+        const ship = new THREE.Mesh(shipGeometry, shipMaterial);
+        
+        // Position ship off-screen initially (upper left)
+        ship.position.set(-50, 20, -30);
+        ship.rotation.y = Math.PI / 4; // Point towards center
+        ship.castShadow = true;
+        ship.receiveShadow = true;
+        this.scene.add(ship);
+        
+        // Store ship reference
+        this.ship = ship;
+        this.shipAnimation = {
+            isAnimating: false,
+            startTime: 0,
+            duration: 3.0, // 3 seconds
+            startPosition: new THREE.Vector3(-50, 20, -30),
+            endPosition: new THREE.Vector3(0, 5, 25), // Behind camera
+            startRotation: new THREE.Euler(0, Math.PI / 4, 0),
+            endRotation: new THREE.Euler(0, Math.PI, 0) // Point away from black hole
+        };
+    }
+
+    updateShipAnimation(deltaTime) {
+        if (!this.ship || !this.shipAnimation.isAnimating) return;
+        
+        const anim = this.shipAnimation;
+        const totalElapsed = this.gameState.time - anim.startTime;
+        
+        // Calculate total duration of all segments
+        let totalDuration = 0;
+        for (let i = 1; i < anim.waypoints.length; i++) {
+            totalDuration += anim.waypoints[i].duration;
+        }
+        
+        // Calculate overall progress (0 to 1)
+        let overallProgress = Math.min(totalElapsed / totalDuration, 1.0);
+        
+        // Apply ease-out only near the very end (last 20% of animation)
+        let easedProgress = overallProgress;
+        if (overallProgress > 0.8) {
+            const endPhase = (overallProgress - 0.8) / 0.2; // 0 to 1 in the last 20%
+            easedProgress = 0.8 + (0.2 * (1.0 - Math.pow(1.0 - endPhase, 3))); // Cubic ease-out
+        }
+        
+        // Find which segment we're in based on eased progress
+        let accumulatedTime = 0;
+        let currentSegment = 0;
+        let segmentProgress = 0;
+        
+        for (let i = 1; i < anim.waypoints.length; i++) {
+            const segmentDuration = anim.waypoints[i].duration;
+            const segmentStartTime = accumulatedTime;
+            const segmentEndTime = accumulatedTime + segmentDuration;
+            
+            if (easedProgress * totalDuration <= segmentEndTime) {
+                currentSegment = i - 1;
+                const timeInSegment = (easedProgress * totalDuration) - segmentStartTime;
+                segmentProgress = timeInSegment / segmentDuration;
+                break;
+            }
+            
+            accumulatedTime += segmentDuration;
+        }
+        
+        // If we're at the very end
+        if (overallProgress >= 1.0) {
+            currentSegment = anim.waypoints.length - 2;
+            segmentProgress = 1.0;
+        }
+        
+        // Get current and next waypoint
+        const fromWaypoint = anim.waypoints[currentSegment];
+        const toWaypoint = anim.waypoints[currentSegment + 1];
+        
+        // Interpolate position (no additional easing - already applied)
+        this.ship.position.lerpVectors(fromWaypoint.position, toWaypoint.position, segmentProgress);
+        
+        // Interpolate rotation
+        this.ship.rotation.x = THREE.MathUtils.lerp(fromWaypoint.rotation.x, toWaypoint.rotation.x, segmentProgress);
+        this.ship.rotation.y = THREE.MathUtils.lerp(fromWaypoint.rotation.y, toWaypoint.rotation.y, segmentProgress);
+        this.ship.rotation.z = THREE.MathUtils.lerp(fromWaypoint.rotation.z, toWaypoint.rotation.z, segmentProgress);
+        
+        // Update camera based on FROM waypoint settings
+        if (fromWaypoint.cameraTrack) {
+            // Camera tracks ship
+            this.camera.position.copy(anim.initialCameraPosition);
+            this.camera.lookAt(this.ship.position);
+        } else {
+            // Camera stays static
+            this.camera.position.copy(anim.initialCameraPosition);
+            this.camera.lookAt(anim.initialCameraLookAt);
+        }
+        
+        // Smooth transition to tracking when switching from static to tracking
+        if (currentSegment === 0 && segmentProgress >= 0.99 && toWaypoint.cameraTrack && !fromWaypoint.cameraTrack) {
+            const lookTarget = new THREE.Vector3();
+            lookTarget.lerpVectors(anim.initialCameraLookAt, this.ship.position, (segmentProgress - 0.99) / 0.01);
+            this.camera.lookAt(lookTarget);
+        }
+        
+        // Update waypoint counter for debug display
+        anim.currentWaypoint = currentSegment;
+        
+        // Check if animation is complete
+        if (overallProgress >= 1.0) {
+            if (this.animationLooping) {
+                // Restart the animation
+                anim.currentWaypoint = 0;
+                anim.startTime = this.gameState.time;
+                console.log('Animation looping - restarting');
+            } else {
+                anim.isAnimating = false;
+                this.shipDebugMode = true; // Enable manual controls
+                console.log('Ship animation complete - manual controls enabled');
+            }
+        }
+    }
+
+    // COMMENTED OUT - Camera animation disabled for debugging
+    // updateCameraFollow(progress) {
+    //     if (!this.ship) return;
+    //     
+    //     const anim = this.shipAnimation;
+    //     
+    //     // Camera stays static initially, then starts tracking the ship
+    //     if (progress < 0.2) {
+    //         // Keep camera at initial position
+    //         this.camera.position.copy(anim.initialCameraPosition);
+    //         this.camera.lookAt(anim.initialCameraLookAt);
+    //     } else if (progress < 0.8) {
+    //         // Smoothly transition to tracking the ship
+    //         const trackProgress = (progress - 0.2) / 0.6; // Normalize to 0-1
+    //         
+    //         // Camera stays in place but starts looking at the ship
+    //         this.camera.position.copy(anim.initialCameraPosition);
+    //         
+    //         // Lerp look target between black hole and ship
+    //         const lookTarget = new THREE.Vector3();
+    //         lookTarget.lerpVectors(anim.initialCameraLookAt, this.ship.position, trackProgress);
+    //         this.camera.lookAt(lookTarget);
+    //     } else {
+    //         // Continue tracking ship
+    //         this.camera.position.copy(anim.initialCameraPosition);
+    //         this.camera.lookAt(this.ship.position);
+    //     }
+    // }
+
+    startShipFlyIn() {
+        if (!this.ship || this.shipAnimation.isAnimating) return;
+        
+        this.shipAnimation.isAnimating = true;
+        this.shipAnimation.startTime = this.gameState.time;
+        this.shipAnimation.currentWaypoint = 0;
+        
+        // Reset ship to first waypoint
+        const firstWaypoint = this.shipAnimation.waypoints[0];
+        this.ship.position.copy(firstWaypoint.position);
+        this.ship.rotation.copy(firstWaypoint.rotation);
+        
+        // Reset camera to initial position
+        this.camera.position.copy(this.shipAnimation.initialCameraPosition);
+        this.camera.lookAt(this.shipAnimation.initialCameraLookAt);
+        
+        console.log('Starting ship waypoint animation');
+    }
+
     updateAccretionAnimation(deltaTime) {
         if (!this.accretionDisk) return;
         
@@ -595,7 +965,16 @@ class Game {
         // Update accretion disk animation
         this.updateAccretionAnimation(deltaTime);
         
-        // Update debug info
+        // Update ship - use animation or manual controls based on debug mode
+        if (!this.shipDebugMode) {
+            this.updateShipAnimation(deltaTime);
+        } else {
+            this.updateShipDebugControls(deltaTime);
+            // Camera moves with ship and continues tracking it
+            this.camera.lookAt(this.ship.position);
+        }
+        
+        // Update debug info (only if debug mode is enabled)
         if (this.debugMode) {
             this.updateDebugInfo();
         }
@@ -614,19 +993,118 @@ class Game {
     toggleDebugMode() {
         this.debugMode = !this.debugMode;
         const debugElement = document.getElementById('debug');
-        debugElement.style.display = this.debugMode ? 'block' : 'none';
+        debugElement.style.display = (this.debugMode || this.shipDebugMode) ? 'block' : 'none';
+    }
+
+    toggleShipDebugMode() {
+        this.shipDebugMode = !this.shipDebugMode;
+        const debugElement = document.getElementById('debug');
+        debugElement.style.display = (this.debugMode || this.shipDebugMode) ? 'block' : 'none';
+        
+        if (this.shipDebugMode) {
+            console.log('Ship Debug Mode ENABLED');
+            console.log('Controls: WASD = Move, Q/E = Up/Down, Arrow Keys = Rotate, R = Reset');
+            console.log('Current Position:', this.ship.position);
+            console.log('Current Rotation:', this.ship.rotation);
+        } else {
+            console.log('Ship Debug Mode DISABLED');
+        }
+    }
+
+    updateShipDebugControls(deltaTime) {
+        if (!this.ship) return;
+        
+        const moveSpeed = 10 * deltaTime; // units per second
+        
+        // Get camera's right and up vectors for screen-space movement
+        const cameraDirection = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDirection);
+        
+        const cameraRight = new THREE.Vector3();
+        cameraRight.crossVectors(this.camera.up, cameraDirection).normalize();
+        
+        const cameraUp = new THREE.Vector3(0, 1, 0); // Always move vertically in world space
+        
+        // Movement controls based on screen coordinates (WASD)
+        const movement = new THREE.Vector3();
+        
+        if (this.inputHandler.isKeyPressed('KeyW')) {
+            // Move up on screen (world Y-axis up)
+            movement.add(cameraUp.clone().multiplyScalar(moveSpeed));
+        }
+        if (this.inputHandler.isKeyPressed('KeyS')) {
+            // Move down on screen (world Y-axis down)
+            movement.add(cameraUp.clone().multiplyScalar(-moveSpeed));
+        }
+        if (this.inputHandler.isKeyPressed('KeyA')) {
+            // Move left on screen
+            movement.add(cameraRight.clone().multiplyScalar(moveSpeed));
+        }
+        if (this.inputHandler.isKeyPressed('KeyD')) {
+            // Move right on screen
+            movement.add(cameraRight.clone().multiplyScalar(-moveSpeed));
+        }
+        
+        // Apply movement to both ship and camera
+        this.ship.position.add(movement);
+        this.camera.position.add(movement);
     }
 
     updateDebugInfo() {
         const debugElement = document.getElementById('debug');
-        debugElement.innerHTML = `
-            <div>FPS: ${Math.round(1 / this.deltaTime)}</div>
-            <div>Delta Time: ${this.deltaTime.toFixed(4)}s</div>
-            <div>Game Objects: ${this.gameObjects.length}</div>
-            <div>Camera Position: ${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}</div>
-            <div>Score: ${this.gameState.score}</div>
-            <div>Time: ${this.gameState.time.toFixed(2)}s</div>
-        `;
+        
+        // Always show ship position if ship exists
+        if (this.ship) {
+            let statusHtml = '';
+            if (this.shipDebugMode) {
+                statusHtml = `
+                    <div style="color: #ffd700; font-weight: bold; margin-top: 10px;">
+                        <strong>MANUAL CONTROL MODE</strong>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 11px; color: #ffd700;">
+                        <strong>Controls:</strong><br>
+                        WASD: Move Screen Up/Down/Left/Right<br>
+                        Camera moves with ship
+                    </div>
+                `;
+            } else {
+                const anim = this.shipAnimation;
+                statusHtml = `
+                    <div style="color: #ff6b6b; font-weight: bold; margin-top: 10px;">
+                        ANIMATION MODE
+                    </div>
+                    <div style="font-size: 12px; margin-top: 5px;">
+                        Waypoint: ${anim.currentWaypoint + 1} / ${anim.waypoints.length}<br>
+                        Camera Tracking: ${anim.waypoints[Math.min(anim.currentWaypoint + 1, anim.waypoints.length - 1)].cameraTrack ? 'ON' : 'OFF'}
+                    </div>
+                `;
+            }
+            
+            const html = `
+                <div style="background: rgba(0, 0, 0, 0.8); padding: 15px; border-radius: 10px;">
+                    <div style="color: #ff6b6b; font-weight: bold; font-size: 16px; margin-bottom: 10px;">
+                        SHIP POSITION & ROTATION
+                    </div>
+                    <div style="color: #4CAF50; font-weight: bold;">Position:</div>
+                    <div>X: ${this.ship.position.x.toFixed(2)}</div>
+                    <div>Y: ${this.ship.position.y.toFixed(2)}</div>
+                    <div>Z: ${this.ship.position.z.toFixed(2)}</div>
+                    <div style="color: #2196F3; font-weight: bold; margin-top: 10px;">Rotation:</div>
+                    <div>X: ${this.ship.rotation.x.toFixed(3)} (${(this.ship.rotation.x * 180 / Math.PI).toFixed(1)}°)</div>
+                    <div>Y: ${this.ship.rotation.y.toFixed(3)} (${(this.ship.rotation.y * 180 / Math.PI).toFixed(1)}°)</div>
+                    <div>Z: ${this.ship.rotation.z.toFixed(3)} (${(this.ship.rotation.z * 180 / Math.PI).toFixed(1)}°)</div>
+                    ${statusHtml}
+                    <div style="margin-top: 10px; background: #1a1a1a; padding: 8px; font-family: monospace; font-size: 10px; border-radius: 5px; color: #00ff00;">
+                        Position:<br>
+                        new THREE.Vector3(${this.ship.position.x.toFixed(2)}, ${this.ship.position.y.toFixed(2)}, ${this.ship.position.z.toFixed(2)})<br><br>
+                        Rotation:<br>
+                        new THREE.Euler(${this.ship.rotation.x.toFixed(3)}, ${this.ship.rotation.y.toFixed(3)}, ${this.ship.rotation.z.toFixed(3)})
+                    </div>
+                </div>
+            `;
+            debugElement.innerHTML = html;
+            debugElement.style.display = 'block';
+        }
     }
 
     showError(message) {

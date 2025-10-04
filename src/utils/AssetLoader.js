@@ -2,8 +2,13 @@ class AssetLoader {
     constructor() {
         this.loader = new THREE.LoadingManager();
         this.textureLoader = new THREE.TextureLoader(this.loader);
-        this.modelLoader = new THREE.ObjectLoader(this.loader);
         this.audioLoader = new THREE.AudioLoader(this.loader);
+        
+        // Initialize GLTF loader when available (check global GLTFLoader)
+        this.gltfLoader = null;
+        if (typeof GLTFLoader !== 'undefined') {
+            this.gltfLoader = new GLTFLoader(this.loader);
+        }
         
         // Asset cache
         this.textures = new Map();
@@ -82,21 +87,29 @@ class AssetLoader {
         return Promise.all(promises);
     }
 
-    // Model loading
-    async loadModel(url) {
+    // GLTF/GLB Model loading
+    async loadGLTF(url) {
         if (this.models.has(url)) {
             return this.models.get(url);
         }
 
+        if (!this.gltfLoader) {
+            console.error('GLTFLoader is not available. Make sure to load it before AssetLoader is created.');
+            throw new Error('GLTFLoader not available');
+        }
+
         return new Promise((resolve, reject) => {
-            this.modelLoader.load(
+            this.gltfLoader.load(
                 url,
-                (object) => {
-                    this.models.set(url, object);
-                    resolve(object);
+                (gltf) => {
+                    console.log(`Model loaded successfully: ${url}`);
+                    this.models.set(url, gltf);
+                    resolve(gltf);
                 },
                 (progress) => {
-                    console.log(`Loading model ${url}: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
+                    if (progress.total > 0) {
+                        console.log(`Loading model ${url}: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
+                    }
                 },
                 (error) => {
                     console.error(`Failed to load model: ${url}`, error);
@@ -104,6 +117,18 @@ class AssetLoader {
                 }
             );
         });
+    }
+
+    // Legacy model loading (for backward compatibility)
+    async loadModel(url) {
+        // Detect file extension and use appropriate loader
+        const extension = url.split('.').pop().toLowerCase();
+        
+        if (extension === 'glb' || extension === 'gltf') {
+            return this.loadGLTF(url);
+        } else {
+            throw new Error(`Unsupported model format: ${extension}. Please use GLB or GLTF format.`);
+        }
     }
 
     // Audio loading
@@ -274,6 +299,16 @@ class AssetLoader {
         );
 
         await Promise.all(promises);
+    }
+
+    // Debug helper - test if loaders are available
+    checkLoadersAvailability() {
+        const status = {
+            GLTFLoader: typeof GLTFLoader !== 'undefined',
+            gltfLoaderInstance: this.gltfLoader !== null
+        };
+        console.log('Loader availability:', status);
+        return status;
     }
 }
 

@@ -1,0 +1,88 @@
+{
+"lootTable": [
+    {
+    "name": "Iron",
+    "rarity": "Common",
+    "value": 5,
+    "bonus": "Fundamental metal; easy to find"
+    },
+    {
+    "name": "Iridium",
+    "rarity": "Uncommon",
+    "value": 25,
+    "bonus": "Durable alloying; small hull repair boost"
+    },
+    {
+    "name": "Osmium",
+    "rarity": "Rare",
+    "value": 60,
+    "bonus": "High-density core; increases cargo capacity slightly"
+    },
+    {
+    "name": "Platinum",
+    "rarity": "Uncommon",
+    "value": 30,
+    "bonus": "Catalyst metal; boosts salvage score multipliers"
+    },
+    {
+    "name": "Thorium Isotopes",
+    "rarity": "Rare",
+    "value": 70,
+    "bonus": "Fuel precursor; adds extra seconds to time limit"
+    },
+    {
+    "name": "Helium-3",
+    "rarity": "Rare",
+    "value": 80,
+    "bonus": "Fusion feedstock; temporary speed boost"
+    },
+    {
+    "name": "Tantalum",
+    "rarity": "Uncommon",
+    "value": 35,
+    "bonus": "Resistant alloy; tractor beam range +5%"
+    },
+    {
+    "name": "Scandium",
+    "rarity": "Uncommon",
+    "value": 20,
+    "bonus": "Light alloy; maneuvering thrusters slightly faster"
+    },
+    {
+    "name": "Neutronium Shard",
+    "rarity": "Epic",
+    "value": 150,
+    "bonus": "Unthinkable density; unlocks hull plating upgrade"
+    },
+    {
+    "name": "Strange Matter Droplet",
+    "rarity": "Epic",
+    "value": 160,
+    "bonus": "Exotic quark state; doubles score of next 2 salvages"
+    },
+    {
+    "name": "Singularity Diamond",
+    "rarity": "Legendary",
+    "value": 220,
+    "bonus": "Indestructible carbon lattice; prevents 1 death by horizon"
+    },
+    {
+    "name": "Chronotite",
+    "rarity": "Legendary",
+    "value": 250,
+    "bonus": "Time crystal; slows debris drift for 10 seconds"
+    },
+    {
+    "name": "Voidstone",
+    "rarity": "Legendary",
+    "value": 300,
+    "bonus": "Absolute absorber; auto-collects 3 nearby objects"
+    },
+    {
+    "name": "Gravitonium",
+    "rarity": "Epic",
+    "value": 180,
+    "bonus": "Gravity-bending mineral; temporary repulsion field"
+    }
+]
+}

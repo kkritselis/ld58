@@ -16,6 +16,7 @@ class InputHandler {
         // Pointer lock
         this.pointerLocked = false;
         this.pointerLockElement = null;
+        this.shouldRequestPointerLock = false;
     }
 
     init() {
@@ -69,8 +70,8 @@ class InputHandler {
                 this.mouseDownCallbacks.get(event.button).forEach(callback => callback(event));
             }
             
-            // Request pointer lock on left click
-            if (event.button === 0) { // Left mouse button
+            // Request pointer lock on left click (only when game is active)
+            if (event.button === 0 && this.shouldRequestPointerLock) { // Left mouse button
                 this.requestPointerLock();
             }
         }, { passive: false });
@@ -189,6 +190,14 @@ class InputHandler {
     requestPointerLock(element = document.body) {
         this.pointerLockElement = element;
         element.requestPointerLock();
+    }
+
+    enablePointerLock() {
+        this.shouldRequestPointerLock = true;
+    }
+
+    disablePointerLock() {
+        this.shouldRequestPointerLock = false;
     }
 
     exitPointerLock() {

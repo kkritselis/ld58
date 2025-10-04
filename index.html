@@ -46,14 +46,16 @@
         #debug {
             position: absolute;
             top: 10px;
-            left: 10px;
+            right: 10px;
             color: white;
             font-size: 14px;
             background: rgba(0, 0, 0, 0.7);
             padding: 10px;
             border-radius: 5px;
             display: none;
+            max-width: 400px;
         }
+        
         
         #controls {
             position: absolute;
@@ -233,9 +235,81 @@
             height: auto;
             filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
         }
+
+        /* Scrolling Text Styles */
+        #scrolling-text {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.5);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            perspective: 400px;
+            overflow: hidden;
+            z-index: 999;
+            pointer-events: none;
+            padding: 20px;
+            border-radius: 15px;
+        }
+
+        .crawl {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.5);
+            top: 100%;
+            left: 50%;
+            width: 80%;
+            max-width: 600px;
+            transform: translateX(-50%) rotateX(15deg);
+            font-family: 'Arial', sans-serif;
+            font-size: 18px;
+            line-height: 1.6;
+            color: #ffd700;
+            text-align: justify;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            animation: crawl 80s linear infinite;
+            padding: 20px;
+            border-radius: 15px;
+        }
+
+        @keyframes crawl {
+            0% {
+                top: 100%;
+                opacity: 1;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                top: -200%;
+                opacity: 0;
+            }
+        }
+
+        .crawl h2 {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 30px;
+            color: #ff6b00;
+            text-shadow: 0 0 15px rgba(255, 107, 0, 0.8);
+        }
     </style>
 </head>
 <body>
+    <!-- Scrolling Text -->
+    <div id="scrolling-text">
+        <div class="crawl">
+            <p>You're about to drop out of hyperspace at the deadliest address in the universe: the edge of a black hole.</p>
+            <p>Suicidal? Maybe. Profitable? Definitely.</p>
+            <p>Why chase rocks across the galaxy when gravity drags every treasure here?</p>
+            <p>Your ship is armed with FTL drives, a stasis field, a laser built to crack asteroids, and an iron extractor. The mission is simple: dive in, snatch as much as you can, and escape before the horizon swallows you.</p>
+            <p>Fuel runs thin. Every scrap you haul makes your ship heavier. Debris storms shove you closer to oblivion.</p>
+            <p>The universe isn't on your side. Collect or be consumed.</p>
+        </div>
+    </div>
+
     <!-- Title -->
     <div id="title">
         <img src="assets/textures/title.png" alt="Black Hole Salvage">
@@ -286,19 +360,35 @@
         <div id="ui">
             <div id="loading">Loading...</div>
             <div id="debug"></div>
-            <!-- <div id="controls">
-                WASD: Move | Mouse: Look | Space: Action | F1: Toggle Debug
-            </div> -->
         </div>
     </div>
 
-    <!-- Three.js from CDN with fallback -->
-    <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
-    <script>
-        // Fallback if unpkg fails
-        if (typeof THREE === 'undefined') {
-            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js"><\/script>');
+    <!-- Import Map for Three.js modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.180.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.180.0/examples/jsm/"
         }
+    }
+    </script>
+    
+    <!-- Initialize THREE globally BEFORE other scripts -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        
+        // Make THREE available globally
+        window.THREE = THREE;
+        
+        // Make GLTFLoader available globally (can't attach to frozen THREE object)
+        window.GLTFLoader = GLTFLoader;
+        
+        console.log('THREE loaded:', typeof THREE);
+        console.log('GLTFLoader loaded:', typeof GLTFLoader);
+        
+        // Dispatch event when ready
+        window.dispatchEvent(new Event('three-ready'));
     </script>
     
     <!-- Game Framework -->
@@ -314,30 +404,23 @@
     
     <!-- Game Entry Point -->
     <script>
-        let loadAttempts = 0;
-        const maxLoadAttempts = 100; // 10 seconds max wait time
         let game = null;
         let audioManager = null;
         let menuManager = null;
         
-        // Check if Three.js is loaded, then initialize systems
-        function checkThreeJSAndInit() {
-            loadAttempts++;
-            
-            if (typeof THREE !== 'undefined') {
-                console.log('Three.js loaded successfully');
-                initializeSystems();
-            } else if (loadAttempts >= maxLoadAttempts) {
-                console.error('Three.js failed to load after 10 seconds. Please check your internet connection or try refreshing the page.');
-                document.getElementById('loading').innerHTML = '<div style="color: red;">Failed to load Three.js. Please refresh the page.</div>';
-            } else {
-                console.log(`Waiting for Three.js to load... (attempt ${loadAttempts}/${maxLoadAttempts})`);
-                setTimeout(checkThreeJSAndInit, 100);
-            }
-        }
-
         async function initializeSystems() {
             try {
+                // Wait for THREE to be ready
+                await new Promise((resolve) => {
+                    if (typeof THREE !== 'undefined' && typeof GLTFLoader !== 'undefined') {
+                        resolve();
+                    } else {
+                        window.addEventListener('three-ready', resolve, { once: true });
+                    }
+                });
+                
+                console.log('THREE and GLTFLoader ready!');
+                
                 // Initialize audio manager
                 audioManager = new AudioManager();
                 audioManager.init();
@@ -360,7 +443,7 @@
         }
 
         // Initialize when page loads
-        window.addEventListener('load', checkThreeJSAndInit);
+        window.addEventListener('load', initializeSystems);
     </script>
 </body>
 </html>

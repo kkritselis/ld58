@@ -168,6 +168,26 @@ class MenuManager {
         if (this.isGameStarted) return;
         
         try {
+            // Fade out and hide scrolling text
+            const scrollingText = document.getElementById('scrolling-text');
+            if (scrollingText) {
+                scrollingText.style.transition = 'opacity 1s ease-out';
+                scrollingText.style.opacity = '0';
+                setTimeout(() => {
+                    scrollingText.style.display = 'none';
+                }, 1000);
+            }
+            
+            // Fade out and hide title image
+            const title = document.getElementById('title');
+            if (title) {
+                title.style.transition = 'opacity 1s ease-out';
+                title.style.opacity = '0';
+                setTimeout(() => {
+                    title.style.display = 'none';
+                }, 1000);
+            }
+            
             // Hide menu
             this.menu.classList.add('hidden');
             
@@ -185,10 +205,16 @@ class MenuManager {
             // Initialize game (if not already initialized)
             if (!this.game.isInitialized) {
                 await this.game.init();
-            } else {
-                // Just start the game loop
-                this.game.start();
             }
+            
+            // Start the game loop
+            this.game.start();
+            
+            // Enable pointer lock for game controls
+            this.game.inputHandler.enablePointerLock();
+            
+            // Start ship fly-in animation
+            this.game.startShipFlyIn();
             
             this.isGameStarted = true;
             console.log('Game started successfully');
@@ -264,9 +290,25 @@ class MenuManager {
     returnToMenu() {
         if (this.game) {
             this.game.pause(); // Pause instead of stop to keep the scene
+            this.game.inputHandler.disablePointerLock(); // Disable pointer lock
         }
         this.audioManager.stopMusic();
         this.showMenu();
+        
+        // Show scrolling text again
+        const scrollingText = document.getElementById('scrolling-text');
+        if (scrollingText) {
+            scrollingText.style.display = 'block';
+            scrollingText.style.opacity = '1';
+        }
+        
+        // Show title again
+        const title = document.getElementById('title');
+        if (title) {
+            title.style.display = 'block';
+            title.style.opacity = '1';
+        }
+        
         // Restart menu music when returning to menu
         this.startMenuMusic();
     }
