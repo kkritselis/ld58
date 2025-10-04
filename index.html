@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LD58 Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        #ui > * {
+            pointer-events: auto;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+        
+        #debug {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        /* Menu Styles */
+        #menu {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: auto;
+            height: auto;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #menu.hidden {
+            display: none;
+        }
+
+        .menu-title {
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .menu-button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            min-width: 180px;
+        }
+
+        .menu-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .menu-button:active {
+            transform: translateY(0);
+        }
+
+        /* Modal Styles */
+        #controls-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        #controls-modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-header {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .volume-control {
+            margin-bottom: 20px;
+        }
+
+        .volume-label {
+            color: white;
+            font-size: 16px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .volume-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff6b6b;
+            cursor: pointer;
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff6b6b;
+            cursor: pointer;
+            border: none;
+        }
+
+        .volume-value {
+            color: #ff6b6b;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        /* Title Styles */
+        #title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001;
+            pointer-events: none;
+        }
+
+        #title img {
+            max-width: 400px;
+            height: auto;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+        }
+    </style>
+</head>
+<body>
+    <!-- Title -->
+    <div id="title">
+        <img src="assets/textures/title.png" alt="Black Hole Salvage">
+    </div>
+
+    <!-- Main Menu -->
+    <div id="menu">
+        <div class="menu-buttons">
+            <button class="menu-button" id="start-button">Start Game</button>
+            <button class="menu-button" id="controls-button">Controls</button>
+        </div>
+    </div>
+
+    <!-- Controls Modal -->
+    <div id="controls-modal">
+        <div class="modal-content">
+            <button class="modal-close" id="modal-close">&times;</button>
+            <h2 class="modal-header">Controls & Settings</h2>
+            
+            <div class="volume-control">
+                <label class="volume-label" for="music-volume">Music Volume</label>
+                <input type="range" id="music-volume" class="volume-slider" min="0" max="100" value="50">
+                <div class="volume-value" id="music-value">50%</div>
+            </div>
+            
+            <div class="volume-control">
+                <label class="volume-label" for="sfx-volume">SFX Volume</label>
+                <input type="range" id="sfx-volume" class="volume-slider" min="0" max="100" value="50">
+                <div class="volume-value" id="sfx-value">50%</div>
+            </div>
+            
+            <div style="margin-top: 30px; color: white; font-size: 14px; line-height: 1.5;">
+                <strong>Controls:</strong><br>
+                WASD: Move<br>
+                Mouse: Look Around<br>
+                Space: Jump/Action<br>
+                F1: Toggle Debug Info<br>
+                ESC: Open/Close Menu
+            </div>
+            
+            <div style="margin-top: 20px; text-align: center;">
+                <button id="return-to-menu" class="menu-button" style="padding: 10px 20px; font-size: 16px; min-width: auto;">Return to Menu</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="gameContainer">
+        <div id="ui">
+            <div id="loading">Loading...</div>
+            <div id="debug"></div>
+            <!-- <div id="controls">
+                WASD: Move | Mouse: Look | Space: Action | F1: Toggle Debug
+            </div> -->
+        </div>
+    </div>
+
+    <!-- Three.js from CDN with fallback -->
+    <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+    <script>
+        // Fallback if unpkg fails
+        if (typeof THREE === 'undefined') {
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js"><\/script>');
+        }
+    </script>
+    
+    <!-- Game Framework -->
+    <script src="src/utils/AudioManager.js"></script>
+    <script src="src/utils/AssetLoader.js"></script>
+    <script src="src/utils/InputHandler.js"></script>
+    <script src="src/utils/GameUtils.js"></script>
+    <script src="src/utils/MenuManager.js"></script>
+    <script src="src/core/GameObject.js"></script>
+    <script src="src/objects/Player.js"></script>
+    <script src="src/objects/Camera.js"></script>
+    <script src="src/core/Game.js"></script>
+    
+    <!-- Game Entry Point -->
+    <script>
+        let loadAttempts = 0;
+        const maxLoadAttempts = 100; // 10 seconds max wait time
+        let game = null;
+        let audioManager = null;
+        let menuManager = null;
+        
+        // Check if Three.js is loaded, then initialize systems
+        function checkThreeJSAndInit() {
+            loadAttempts++;
+            
+            if (typeof THREE !== 'undefined') {
+                console.log('Three.js loaded successfully');
+                initializeSystems();
+            } else if (loadAttempts >= maxLoadAttempts) {
+                console.error('Three.js failed to load after 10 seconds. Please check your internet connection or try refreshing the page.');
+                document.getElementById('loading').innerHTML = '<div style="color: red;">Failed to load Three.js. Please refresh the page.</div>';
+            } else {
+                console.log(`Waiting for Three.js to load... (attempt ${loadAttempts}/${maxLoadAttempts})`);
+                setTimeout(checkThreeJSAndInit, 100);
+            }
+        }
+
+        async function initializeSystems() {
+            try {
+                // Initialize audio manager
+                audioManager = new AudioManager();
+                audioManager.init();
+                
+                // Initialize game and start it for menu background
+                game = new Game();
+                await game.init(); // Initialize the black hole scene
+                game.start(); // Start rendering for menu background
+                
+                // Initialize menu manager
+                menuManager = new MenuManager();
+                menuManager.init(game, audioManager);
+                
+                console.log('All systems initialized successfully');
+                
+            } catch (error) {
+                console.error('Failed to initialize systems:', error);
+                document.getElementById('loading').innerHTML = '<div style="color: red;">Failed to initialize game systems. Please refresh the page.</div>';
+            }
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', checkThreeJSAndInit);
+    </script>
+</body>
+</html>
+

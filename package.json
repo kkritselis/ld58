@@ -1,0 +1,37 @@
+{
+  "name": "ld58-game",
+  "version": "1.0.0",
+  "description": "HTML5 3D Game Framework for Ludum Dare 58",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "dev": "python3 -m http.server 8000",
+    "build": "echo 'No build process needed for vanilla JS'",
+    "serve": "python3 -m http.server 8000"
+  },
+  "keywords": [
+    "game",
+    "html5",
+    "threejs",
+    "3d",
+    "javascript",
+    "ludum-dare"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "bugs": {
+    "url": "."
+  },
+  "homepage": "."
+}
+
