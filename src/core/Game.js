@@ -22,6 +22,29 @@ class Game {
             lives: 3,
             time: 0
         };
+        
+        // Ship stats
+        this.shipStats = {
+            warp: 2.2,          // Current warp level (0.0 - 11.0)
+            warpMax: 6.5,       // Max warp for base ship
+            fuel: 100,          // Current fuel (0 - 100%)
+            fuelMax: 100,       // Max fuel capacity
+            iron: 0.0,          // Current iron cargo (tons)
+            cargoMax: 20.0,     // Max cargo capacity (tons)
+            distance: 100.0     // Distance to event horizon (clicks)
+        };
+        
+        // Fuel consumption timer
+        this.fuelConsumptionTimer = 0;
+        
+        // Equilibrium warp speed (neither approaching nor escaping)
+        this.equilibriumWarp = 2.2;
+        
+        // Asteroid system
+        this.asteroidModels = [];
+        this.asteroids = [];
+        this.asteroidSpawnTimer = 0;
+        this.asteroidSpawnInterval = 5.0; // seconds
     }
 
     async init() {
@@ -56,17 +79,24 @@ class Game {
     }
 
     setupRenderer() {
+        const container = document.getElementById('gameContainer');
+        
         this.renderer = new THREE.WebGLRenderer({ 
             antialias: true,
             alpha: true 
         });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        // Use container dimensions instead of window dimensions
+        const width = Math.min(container.clientWidth, 1280);
+        const height = container.clientHeight;
+        
+        this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.setClearColor(0x87CEEB, 1); // Sky blue
         
-        document.getElementById('gameContainer').appendChild(this.renderer.domElement);
+        container.appendChild(this.renderer.domElement);
         
         // Handle window resize
         window.addEventListener('resize', () => this.onWindowResize());
@@ -81,9 +111,13 @@ class Game {
     }
 
     setupCamera() {
+        const container = document.getElementById('gameContainer');
+        const width = Math.min(container.clientWidth, 1280);
+        const height = container.clientHeight;
+        
         this.camera = new THREE.PerspectiveCamera(
             75, 
-            window.innerWidth / window.innerHeight, 
+            width / height, 
             0.1, 
             1000
         );
@@ -185,7 +219,10 @@ class Game {
         // Create ship (async)
         await this.createShip();
         
-        console.log('Glass sphere, accretion disk, and ship created');
+        // Load asteroid models (async)
+        await this.loadAsteroidModels();
+        
+        console.log('Glass sphere, accretion disk, ship, and asteroids created');
     }
 
     createGlassSphere() {
@@ -539,6 +576,9 @@ class Game {
         this.ship.position.set(-27.34, 9.33, -8.64);
         this.ship.rotation.set(0.000, -2.146, 0.000);
         
+        // Create shield effect
+        this.createShipShield();
+        
         this.shipAnimation = {
             isAnimating: false,
             startTime: 0,
@@ -660,6 +700,9 @@ class Game {
         this.ship.position.set(-27.34, 9.33, -8.64);
         this.ship.rotation.set(0.000, -2.146, 0.000);
         
+        // Create shield effect
+        this.createShipShield();
+        
         this.shipAnimation = {
             isAnimating: false,
             startTime: 0,
@@ -695,6 +738,229 @@ class Game {
         };
         
         console.log('Procedural ship created successfully');
+    }
+    
+    createShipShield() {
+        if (!this.ship) return;
+        
+        // Calculate bounding box of ship
+        const bbox = new THREE.Box3().setFromObject(this.ship);
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        bbox.getSize(size);
+        bbox.getCenter(center);
+        
+        // Create an egg-shaped (ellipsoid) shield
+        // Use sphere geometry and scale it to match ship dimensions
+        const shieldGeometry = new THREE.SphereGeometry(1, 32, 32);
+        const shieldMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ffff, // Cyan shield color
+            transparent: true,
+            opacity: 0, // Hidden by default
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending, // Makes it glow
+            depthWrite: false, // Don't write to depth buffer when transparent
+            depthTest: true
+        });
+        
+        this.shipShield = new THREE.Mesh(shieldGeometry, shieldMaterial);
+        
+        // Scale to match ship bounding box (egg shape - slightly taller)
+        this.shipShield.scale.set(
+            size.x * 0.7,  // Width
+            size.y * 0.9,  // Height (slightly more for egg shape)
+            size.z * 0.7   // Depth
+        );
+        
+        // Position shield at center of ship's bounding box (in ship's local space)
+        const localCenter = this.ship.worldToLocal(center.clone());
+        this.shipShield.position.copy(localCenter);
+        
+        // Make sure it's invisible initially
+        this.shipShield.visible = false;
+        
+        // Add shield as child of ship so it moves with the ship
+        this.ship.add(this.shipShield);
+        
+        console.log('Ship shield created at local position:', localCenter);
+    }
+    
+    flashShield() {
+        if (!this.shipShield) return;
+        
+        // Make shield visible and flash to 90% opacity (10% transparency)
+        this.shipShield.visible = true;
+        this.shipShield.material.opacity = 0.9;
+        
+        // Fade out over 0.5 seconds
+        const fadeStart = performance.now();
+        const fadeDuration = 500; // milliseconds
+        
+        const fadeShield = (currentTime) => {
+            const elapsed = currentTime - fadeStart;
+            const progress = Math.min(elapsed / fadeDuration, 1);
+            
+            // Fade from 0.9 to 0
+            this.shipShield.material.opacity = 0.9 * (1 - progress);
+            
+            if (progress < 1) {
+                requestAnimationFrame(fadeShield);
+            } else {
+                // Hide shield completely when animation is done
+                this.shipShield.visible = false;
+            }
+        };
+        
+        requestAnimationFrame(fadeShield);
+    }
+    
+    async loadAsteroidModels() {
+        console.log('Loading asteroid models...');
+        const modelPaths = [
+            'assets/models/astroid01.glb',
+            'assets/models/astroid02.glb',
+            'assets/models/astroid03.glb',
+            'assets/models/astroid04.glb',
+            'assets/models/astroid05.glb'
+        ];
+        
+        for (const path of modelPaths) {
+            try {
+                const gltf = await this.assetLoader.loadGLTF(path);
+                this.asteroidModels.push(gltf.scene.clone());
+                console.log(`Loaded asteroid: ${path}`);
+            } catch (error) {
+                console.error(`Failed to load asteroid ${path}:`, error);
+            }
+        }
+        
+        console.log(`${this.asteroidModels.length} asteroid models loaded`);
+    }
+    
+    spawnAsteroid() {
+        if (this.asteroidModels.length === 0 || !this.ship || !this.camera) return;
+        
+        // Select random asteroid model
+        const randomIndex = Math.floor(Math.random() * this.asteroidModels.length);
+        const asteroidClone = this.asteroidModels[randomIndex].clone();
+        
+        // Get camera forward direction
+        const cameraDirection = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDirection);
+        
+        // Spawn distance ahead of ship
+        const spawnDistance = 80 + Math.random() * 40; // 80-120 units ahead
+        
+        // Random offset from center (spread pattern)
+        const spreadRadius = 30;
+        const offsetX = (Math.random() - 0.5) * spreadRadius;
+        const offsetY = (Math.random() - 0.5) * spreadRadius;
+        
+        // Calculate spawn position ahead of camera direction
+        const spawnPosition = new THREE.Vector3()
+            .copy(this.ship.position)
+            .add(cameraDirection.multiplyScalar(spawnDistance))
+            .add(new THREE.Vector3(offsetX, offsetY, 0));
+        
+        asteroidClone.position.copy(spawnPosition);
+        
+        // Random scale
+        const scale = 0.5 + Math.random() * 1.5; // 0.5 to 2.0
+        asteroidClone.scale.setScalar(scale);
+        
+        // Random rotation speed
+        const rotationSpeed = {
+            x: (Math.random() - 0.5) * 2, // -1 to 1
+            y: (Math.random() - 0.5) * 2,
+            z: (Math.random() - 0.5) * 2
+        };
+        
+        // Calculate velocity based on current warp speed
+        // Asteroids move toward the ship at a speed relative to warp
+        const baseSpeed = (this.shipStats.warp + 2) * 3; // Faster as warp increases
+        const velocity = new THREE.Vector3()
+            .subVectors(this.ship.position, spawnPosition)
+            .normalize()
+            .multiplyScalar(baseSpeed);
+        
+        // Enable shadows
+        asteroidClone.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+        
+        // Add to scene
+        this.scene.add(asteroidClone);
+        
+        // Store asteroid data with velocity
+        this.asteroids.push({
+            mesh: asteroidClone,
+            rotationSpeed: rotationSpeed,
+            velocity: velocity, // Constant velocity set at spawn
+            isColliding: false // Track if already collided to prevent multiple hits
+        });
+        
+        console.log(`Spawned asteroid at (${spawnPosition.x.toFixed(1)}, ${spawnPosition.y.toFixed(1)}, ${spawnPosition.z.toFixed(1)})`);
+    }
+    
+    updateAsteroids(deltaTime) {
+        if (!this.ship) return;
+        
+        // Remove asteroids that are too far behind the player
+        this.asteroids = this.asteroids.filter(asteroid => {
+            const distance = asteroid.mesh.position.distanceTo(this.ship.position);
+            if (distance > 150) {
+                this.scene.remove(asteroid.mesh);
+                return false;
+            }
+            return true;
+        });
+        
+        // Update each asteroid
+        this.asteroids.forEach(asteroid => {
+            // Rotate asteroid smoothly
+            asteroid.mesh.rotation.x += asteroid.rotationSpeed.x * deltaTime;
+            asteroid.mesh.rotation.y += asteroid.rotationSpeed.y * deltaTime;
+            asteroid.mesh.rotation.z += asteroid.rotationSpeed.z * deltaTime;
+            
+            // Move with constant velocity (smooth movement)
+            const movement = asteroid.velocity.clone().multiplyScalar(deltaTime);
+            asteroid.mesh.position.add(movement);
+            
+            // Check for collision with ship
+            const distance = asteroid.mesh.position.distanceTo(this.ship.position);
+            const collisionRadius = 5; // Collision detection radius
+            
+            if (distance < collisionRadius && !asteroid.isColliding) {
+                // New collision detected - apply damage immediately
+                const damage = this.shipStats.warp; // Damage equals current warp speed
+                this.shipStats.distance = Math.max(0, this.shipStats.distance - damage);
+                
+                // Mark as colliding to prevent multiple hits
+                asteroid.isColliding = true;
+                
+                // Flash the shield effect
+                this.flashShield();
+                
+                // Slow down the asteroid to 1/2 speed
+                asteroid.velocity.multiplyScalar(0.5);
+                
+                // Push asteroid away in a random cardinal direction
+                const pushDistance = 3 + Math.random() * 3; // 3-6 units away
+                const directions = [
+                    new THREE.Vector3(pushDistance, 0, 0),  // right
+                    new THREE.Vector3(-pushDistance, 0, 0), // left
+                    new THREE.Vector3(0, pushDistance, 0),  // up
+                    new THREE.Vector3(0, -pushDistance, 0)  // down
+                ];
+                const randomDirection = directions[Math.floor(Math.random() * directions.length)];
+                asteroid.mesh.position.add(randomDirection);
+                
+                console.log(`Asteroid collision! Lost ${damage.toFixed(1)} clicks. Distance: ${this.shipStats.distance.toFixed(1)}`);
+            }
+        });
     }
 
     createShipPlaceholder() {
@@ -820,8 +1086,103 @@ class Game {
             } else {
                 anim.isAnimating = false;
                 this.shipDebugMode = true; // Enable manual controls
+                this.showUIPanel(); // Show UI panel
                 console.log('Ship animation complete - manual controls enabled');
             }
+        }
+    }
+    
+    showUIPanel() {
+        const uiPanel = document.getElementById('ui-panel');
+        if (uiPanel) {
+            uiPanel.classList.add('visible');
+            console.log('UI panel sliding up');
+            
+            // Show black-hud after UI panel finishes animating (0.8s)
+            setTimeout(() => {
+                const blackHud = document.getElementById('black-hud');
+                if (blackHud) {
+                    blackHud.classList.add('visible');
+                    console.log('Black HUD fading in');
+                }
+                
+                const distanceDisplay = document.getElementById('distance-display');
+                if (distanceDisplay) {
+                    distanceDisplay.classList.add('visible');
+                    console.log('Distance display showing');
+                }
+                
+                // Show HUD bars at the same time
+                this.showHudBars();
+            }, 800);
+        }
+    }
+    
+    hideUIPanel() {
+        const uiPanel = document.getElementById('ui-panel');
+        const blackHud = document.getElementById('black-hud');
+        const hudBars = document.getElementById('hud-bars');
+        const distanceDisplay = document.getElementById('distance-display');
+        
+        // Hide black-hud, hud-bars, and distance display first
+        if (blackHud) {
+            blackHud.classList.remove('visible');
+        }
+        if (hudBars) {
+            hudBars.classList.remove('visible');
+        }
+        if (distanceDisplay) {
+            distanceDisplay.classList.remove('visible');
+        }
+        
+        if (uiPanel) {
+            uiPanel.classList.remove('visible');
+            console.log('UI panel sliding down');
+        }
+    }
+    
+    showHudBars() {
+        const hudBars = document.getElementById('hud-bars');
+        if (hudBars) {
+            hudBars.classList.add('visible');
+            this.updateHudBars(); // Initialize with current values
+            console.log('HUD bars showing');
+        }
+    }
+    
+    updateHudBars() {
+        // Update Warp bar (0.0 - 11.0, display current/max)
+        const warpBar = document.getElementById('bar-warp');
+        const warpValue = document.getElementById('value-warp');
+        if (warpBar && warpValue) {
+            const warpPercent = (this.shipStats.warp / 11.0) * 100;
+            warpBar.style.height = `${warpPercent}%`;
+            warpValue.textContent = this.shipStats.warp.toFixed(1);
+        }
+        
+        // Update Fuel bar (0 - 100%)
+        const fuelBar = document.getElementById('bar-fuel');
+        const fuelValue = document.getElementById('value-fuel');
+        if (fuelBar && fuelValue) {
+            const fuelPercent = (this.shipStats.fuel / this.shipStats.fuelMax) * 100;
+            fuelBar.style.height = `${fuelPercent}%`;
+            fuelValue.textContent = `${Math.round(this.shipStats.fuel)}%`;
+        }
+        
+        // Update Iron/Cargo bar (0.0 - cargoMax tons)
+        const ironBar = document.getElementById('bar-iron');
+        const ironValue = document.getElementById('value-iron');
+        if (ironBar && ironValue) {
+            const ironPercent = (this.shipStats.iron / this.shipStats.cargoMax) * 100;
+            ironBar.style.height = `${ironPercent}%`;
+            ironValue.textContent = `${this.shipStats.iron.toFixed(1)}t`;
+        }
+    }
+    
+    updateDistanceDisplay() {
+        const distanceValue = document.getElementById('distance-value');
+        if (distanceValue) {
+            distanceValue.textContent = this.shipStats.distance.toFixed(1);
         }
     }
 
@@ -974,6 +1335,49 @@ class Game {
             this.camera.lookAt(this.ship.position);
         }
         
+        // Update fuel consumption and distance (runs every second when ship is under manual control)
+        if (this.shipDebugMode) {
+            this.fuelConsumptionTimer += deltaTime;
+            if (this.fuelConsumptionTimer >= 1.0) {
+                // Consume fuel based on warp level: warp / 10 per second
+                const fuelConsumption = this.shipStats.warp / 10;
+                this.shipStats.fuel = Math.max(0, this.shipStats.fuel - fuelConsumption);
+                
+                // Update distance based on warp difference from equilibrium
+                const warpDifference = this.shipStats.warp - this.equilibriumWarp;
+                this.shipStats.distance = Math.max(0, this.shipStats.distance + warpDifference);
+                
+                this.fuelConsumptionTimer = 0;
+                
+                // If out of fuel, decrease warp speed
+                if (this.shipStats.fuel <= 0) {
+                    this.shipStats.warp = Math.max(0, this.shipStats.warp - 0.2);
+                }
+            }
+            
+            // Spawn asteroids every 5 seconds
+            this.asteroidSpawnTimer += deltaTime;
+            if (this.asteroidSpawnTimer >= this.asteroidSpawnInterval) {
+                this.spawnAsteroid();
+                this.asteroidSpawnTimer = 0;
+            }
+        }
+        
+        // Update asteroids
+        this.updateAsteroids(deltaTime);
+        
+        // Update HUD bars if visible
+        const hudBars = document.getElementById('hud-bars');
+        if (hudBars && hudBars.classList.contains('visible')) {
+            this.updateHudBars();
+        }
+        
+        // Update distance display if visible
+        const distanceDisplay = document.getElementById('distance-display');
+        if (distanceDisplay && distanceDisplay.classList.contains('visible')) {
+            this.updateDistanceDisplay();
+        }
+        
         // Update debug info (only if debug mode is enabled)
         if (this.debugMode) {
             this.updateDebugInfo();
@@ -985,9 +1389,13 @@ class Game {
     }
 
     onWindowResize() {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
+        const container = document.getElementById('gameContainer');
+        const width = Math.min(container.clientWidth, 1280);
+        const height = container.clientHeight;
+        
+        this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setSize(width, height);
     }
 
     toggleDebugMode() {
@@ -1014,7 +1422,18 @@ class Game {
     updateShipDebugControls(deltaTime) {
         if (!this.ship) return;
         
+        // Store home rotation on first call
+        if (!this.shipHomeRotation) {
+            this.shipHomeRotation = {
+                x: this.ship.rotation.x,
+                y: this.ship.rotation.y,
+                z: this.ship.rotation.z
+            };
+        }
+        
         const moveSpeed = 10 * deltaTime; // units per second
+        const rotationAmount = 0.3; // Maximum rotation in radians
+        const rotationSpeed = 8.0; // How fast to interpolate rotation
         
         // Get camera's right and up vectors for screen-space movement
         const cameraDirection = new THREE.Vector3();
@@ -1028,26 +1447,63 @@ class Game {
         // Movement controls based on screen coordinates (WASD)
         const movement = new THREE.Vector3();
         
+        // Target rotation offsets from home position
+        let targetPitch = 0; // X-axis rotation
+        let targetRoll = 0;  // Z-axis rotation
+        
         if (this.inputHandler.isKeyPressed('KeyW')) {
             // Move up on screen (world Y-axis up)
             movement.add(cameraUp.clone().multiplyScalar(moveSpeed));
+            // Tilt nose up
+            targetPitch = -rotationAmount;
         }
         if (this.inputHandler.isKeyPressed('KeyS')) {
             // Move down on screen (world Y-axis down)
             movement.add(cameraUp.clone().multiplyScalar(-moveSpeed));
+            // Tilt nose down
+            targetPitch = rotationAmount;
         }
         if (this.inputHandler.isKeyPressed('KeyA')) {
             // Move left on screen
             movement.add(cameraRight.clone().multiplyScalar(moveSpeed));
+            // Bank left
+            targetRoll = rotationAmount;
         }
         if (this.inputHandler.isKeyPressed('KeyD')) {
             // Move right on screen
             movement.add(cameraRight.clone().multiplyScalar(-moveSpeed));
+            // Bank right
+            targetRoll = -rotationAmount;
+        }
+        
+        // Warp control with arrow keys
+        if (this.inputHandler.isKeyPressed('ArrowUp')) {
+            // Increase warp (0.1 increments, up to warpMax)
+            this.shipStats.warp = Math.min(this.shipStats.warp + 0.1, this.shipStats.warpMax);
+        }
+        if (this.inputHandler.isKeyPressed('ArrowDown')) {
+            // Decrease warp (0.1 increments, down to 0.0)
+            this.shipStats.warp = Math.max(this.shipStats.warp - 0.1, 0.0);
         }
         
         // Apply movement to both ship and camera
         this.ship.position.add(movement);
         this.camera.position.add(movement);
+        
+        // Smoothly interpolate ship rotation
+        const targetRotationX = this.shipHomeRotation.x + targetPitch;
+        const targetRotationZ = this.shipHomeRotation.z + targetRoll;
+        
+        this.ship.rotation.x = THREE.MathUtils.lerp(
+            this.ship.rotation.x,
+            targetRotationX,
+            rotationSpeed * deltaTime
+        );
+        this.ship.rotation.z = THREE.MathUtils.lerp(
+            this.ship.rotation.z,
+            targetRotationZ,
+            rotationSpeed * deltaTime
+        );
     }
 
     updateDebugInfo() {
