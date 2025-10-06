@@ -34,17 +34,46 @@ class Game {
             distance: 100.0     // Distance to event horizon (clicks)
         };
         
+        // Player economy
+        this.credits = 0;
+        this.ironPrice = 50; // Credits per ton of iron
+        
+        // Owned upgrades
+        this.ownedUpgrades = {
+            ship: 'base_ship',
+            weapon: 'laser_mk1',
+            engine: 'standard_drive',
+            extractor: 'basic_collector'
+        };
+        
         // Fuel consumption timer
         this.fuelConsumptionTimer = 0;
         
         // Equilibrium warp speed (neither approaching nor escaping)
         this.equilibriumWarp = 2.2;
         
+        // Trading station
+        this.stationScene = null;
+        this.stationCamera = null;
+        this.stationRenderer = null;
+        this.stationShip = null;
+        
         // Asteroid system
         this.asteroidModels = [];
         this.asteroids = [];
         this.asteroidSpawnTimer = 0;
         this.asteroidSpawnInterval = 5.0; // seconds
+        
+        // Laser system
+        this.laserRange = 30; // Units
+        this.laserBeam = null;
+        this.currentLaserTarget = null;
+        
+        // Particle system for explosions
+        this.particles = [];
+        
+        // Game over state
+        this.isGameOver = false;
     }
 
     async init() {
@@ -179,6 +208,14 @@ class Game {
         this.inputHandler.onKeyDown('F1', () => {
             this.toggleDebugMode();
         });
+        
+        // Hyperjump to trading station
+        this.inputHandler.onKeyDown('Space', () => {
+            // Only allow hyperjump when game is running and player is in control
+            if (this.isRunning && this.shipDebugMode && !this.isGameOver) {
+                this.openTradingStation();
+            }
+        });
     }
 
     setupAssetLoader() {
@@ -193,6 +230,28 @@ class Game {
             const textures = {
             };
             
+            // Load all JSON data files
+            const [lootData, shipsData, weaponsData, enginesData, extractorsData] = await Promise.all([
+                fetch('src/data/loot.json').then(r => r.json()),
+                fetch('src/data/ships.json').then(r => r.json()),
+                fetch('src/data/weapons.json').then(r => r.json()),
+                fetch('src/data/engines.json').then(r => r.json()),
+                fetch('src/data/extractors.json').then(r => r.json())
+            ]);
+            
+            this.lootTable = lootData.lootTable || [];
+            this.shipsData = shipsData.ships || [];
+            this.weaponsData = weaponsData.weapons || [];
+            this.enginesData = enginesData.engines || [];
+            this.extractorsData = extractorsData.extractors || [];
+            
+            console.log('Loaded game data:');
+            console.log('- Minerals:', this.lootTable.length);
+            console.log('- Ships:', this.shipsData.length);
+            console.log('- Weapons:', this.weaponsData.length);
+            console.log('- Engines:', this.enginesData.length);
+            console.log('- Extractors:', this.extractorsData.length);
+            
             // Store loaded assets
             this.assets = { textures };
             
@@ -205,6 +264,11 @@ class Game {
             console.warn('Some assets failed to load:', error);
             // Continue without those assets
             this.assets = { textures: {} };
+            this.lootTable = [];
+            this.shipsData = [];
+            this.weaponsData = [];
+            this.enginesData = [];
+            this.extractorsData = [];
             loadingElement.style.display = 'none';
         }
     }
@@ -579,6 +643,9 @@ class Game {
         // Create shield effect
         this.createShipShield();
         
+        // Create laser beam
+        this.createLaserBeam();
+        
         this.shipAnimation = {
             isAnimating: false,
             startTime: 0,
@@ -703,6 +770,9 @@ class Game {
         // Create shield effect
         this.createShipShield();
         
+        // Create laser beam
+        this.createLaserBeam();
+        
         this.shipAnimation = {
             isAnimating: false,
             startTime: 0,
@@ -814,6 +884,196 @@ class Game {
         requestAnimationFrame(fadeShield);
     }
     
+    createLaserBeam() {
+        if (!this.ship) return;
+        
+        // Create a line geometry for the laser beam
+        const laserGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array([
+            0, 0, 0,  // Start point (at ship)
+            0, 0, 0   // End point (will be updated)
+        ]);
+        laserGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        
+        // Create glowing material for laser
+        const laserMaterial = new THREE.LineBasicMaterial({
+            color: 0xff0000, // Red laser
+            linewidth: 3,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        this.laserBeam = new THREE.Line(laserGeometry, laserMaterial);
+        this.laserBeam.visible = false; // Hidden by default
+        
+        // Add to ship so it moves with the ship
+        this.ship.add(this.laserBeam);
+        
+        console.log('Laser beam created');
+    }
+    
+    updateLaserBeam(target) {
+        if (!this.laserBeam || !this.ship || !target) return;
+        
+        // Calculate laser end point in ship's local space
+        const targetWorld = target.position.clone();
+        const shipWorld = this.ship.position.clone();
+        const laserEnd = this.ship.worldToLocal(targetWorld);
+        
+        // Update laser geometry
+        const positions = this.laserBeam.geometry.attributes.position.array;
+        positions[0] = 0; // Start at ship center (local)
+        positions[1] = 0;
+        positions[2] = 0;
+        positions[3] = laserEnd.x; // End at target (local)
+        positions[4] = laserEnd.y;
+        positions[5] = laserEnd.z;
+        
+        this.laserBeam.geometry.attributes.position.needsUpdate = true;
+        this.laserBeam.visible = true;
+    }
+    
+    hideLaserBeam() {
+        if (this.laserBeam) {
+            this.laserBeam.visible = false;
+        }
+    }
+    
+    createParticleExplosion(position, velocity) {
+        const particleCount = 160 + Math.floor(Math.random() * 120); // 160-280 particles
+        const ironAmount = 0.5 + Math.random() * 1.5; // 0.5-2.0 tons per explosion
+        const ironPerParticle = ironAmount / particleCount;
+        
+        // Array of different geometries for variety
+        const geometries = [
+            new THREE.BoxGeometry(0.15, 0.15, 0.15),
+            new THREE.BoxGeometry(0.2, 0.1, 0.1),
+            new THREE.TetrahedronGeometry(0.12),
+            new THREE.OctahedronGeometry(0.1),
+            new THREE.BoxGeometry(0.1, 0.2, 0.1),
+            new THREE.DodecahedronGeometry(0.08)
+        ];
+        
+        // Brown/earth tone colors
+        const brownColors = [
+            0x8B4513, // Saddle brown
+            0xA0522D, // Sienna
+            0x6B4423, // Dark brown
+            0x8B7355, // Burlywood
+            0x704214, // Sepia
+            0x9B5C34, // Rust brown
+            0x654321  // Dark brown
+        ];
+        
+        for (let i = 0; i < particleCount; i++) {
+            // Random spread direction (wider spread)
+            const spread = 5;
+            const particleVelocity = new THREE.Vector3(
+                velocity.x + (Math.random() - 0.5) * spread,
+                velocity.y + (Math.random() - 0.5) * spread,
+                velocity.z + (Math.random() - 0.5) * spread
+            );
+            
+            // Random geometry and color
+            const geometry = geometries[Math.floor(Math.random() * geometries.length)].clone();
+            const color = brownColors[Math.floor(Math.random() * brownColors.length)];
+            
+            const particleMaterial = new THREE.MeshBasicMaterial({
+                color: color,
+                transparent: true,
+                opacity: 1.0
+            });
+            
+            const particleMesh = new THREE.Mesh(geometry, particleMaterial);
+            particleMesh.position.copy(position);
+            
+            // Random initial rotation
+            particleMesh.rotation.set(
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2
+            );
+            
+            this.scene.add(particleMesh);
+            
+            // Random rotation speed for tumbling effect
+            const rotationSpeed = {
+                x: (Math.random() - 0.5) * 4,
+                y: (Math.random() - 0.5) * 4,
+                z: (Math.random() - 0.5) * 4
+            };
+            
+            // Store particle data
+            this.particles.push({
+                mesh: particleMesh,
+                velocity: particleVelocity,
+                rotationSpeed: rotationSpeed,
+                lifetime: 10.0, // seconds
+                age: 0,
+                ironValue: ironPerParticle,
+                collected: false
+            });
+        }
+        
+        console.log(`Created ${particleCount} particles with ${ironAmount.toFixed(2)} tons of iron`);
+    }
+    
+    updateParticles(deltaTime) {
+        if (!this.ship) return;
+        
+        const collectionRange = 8; // Units - range for automatic collection
+        
+        this.particles = this.particles.filter(particle => {
+            // Age the particle
+            particle.age += deltaTime;
+            
+            // Remove if too old
+            if (particle.age >= particle.lifetime) {
+                this.scene.remove(particle.mesh);
+                if (particle.mesh.geometry) particle.mesh.geometry.dispose();
+                if (particle.mesh.material) particle.mesh.material.dispose();
+                return false;
+            }
+            
+            // Move particle
+            particle.mesh.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
+            
+            // Rotate particle for tumbling effect
+            if (particle.rotationSpeed) {
+                particle.mesh.rotation.x += particle.rotationSpeed.x * deltaTime;
+                particle.mesh.rotation.y += particle.rotationSpeed.y * deltaTime;
+                particle.mesh.rotation.z += particle.rotationSpeed.z * deltaTime;
+            }
+            
+            // Fade out over time
+            const fadeStart = particle.lifetime * 0.7;
+            if (particle.age > fadeStart) {
+                const fadeProgress = (particle.age - fadeStart) / (particle.lifetime - fadeStart);
+                particle.mesh.material.opacity = 1.0 - fadeProgress;
+            }
+            
+            // Check for collection
+            if (!particle.collected) {
+                const distance = particle.mesh.position.distanceTo(this.ship.position);
+                if (distance < collectionRange) {
+                    // Collect the particle (apply extractor upgrade multiplier)
+                    particle.collected = true;
+                    const extractorMultiplier = this.getExtractorMultiplier();
+                    const ironCollected = particle.ironValue * extractorMultiplier;
+                    this.shipStats.iron = Math.min(this.shipStats.cargoMax, this.shipStats.iron + ironCollected);
+                    
+                    // Remove particle
+                    this.scene.remove(particle.mesh);
+                    if (particle.mesh.geometry) particle.mesh.geometry.dispose();
+                    if (particle.mesh.material) particle.mesh.material.dispose();
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+    }
+    
     async loadAsteroidModels() {
         console.log('Loading asteroid models...');
         const modelPaths = [
@@ -894,12 +1154,17 @@ class Game {
         // Add to scene
         this.scene.add(asteroidClone);
         
+        // Random health: 1-5 seconds of laser time to destroy
+        const health = 1.0 + Math.random() * 4.0;
+        
         // Store asteroid data with velocity
         this.asteroids.push({
             mesh: asteroidClone,
             rotationSpeed: rotationSpeed,
             velocity: velocity, // Constant velocity set at spawn
-            isColliding: false // Track if already collided to prevent multiple hits
+            isColliding: false, // Track if already collided to prevent multiple hits
+            health: health, // Seconds of laser fire to destroy
+            maxHealth: health
         });
         
         console.log(`Spawned asteroid at (${spawnPosition.x.toFixed(1)}, ${spawnPosition.y.toFixed(1)}, ${spawnPosition.z.toFixed(1)})`);
@@ -907,6 +1172,60 @@ class Game {
     
     updateAsteroids(deltaTime) {
         if (!this.ship) return;
+        
+        // Get ship's forward direction (in world space)
+        const shipForward = new THREE.Vector3(0, 0, -1);
+        shipForward.applyQuaternion(this.ship.quaternion);
+        
+        // Find closest asteroid within laser range for targeting
+        let closestAsteroid = null;
+        let closestDistance = this.laserRange;
+        
+        this.asteroids.forEach(asteroid => {
+            const distance = asteroid.mesh.position.distanceTo(this.ship.position);
+            
+            // Check if asteroid is in front of ship
+            const toAsteroid = new THREE.Vector3().subVectors(asteroid.mesh.position, this.ship.position).normalize();
+            const dotProduct = shipForward.dot(toAsteroid);
+            const isInFront = dotProduct > 0; // Positive dot product means in front
+            
+            if (distance < closestDistance && asteroid.health > 0 && isInFront) {
+                closestDistance = distance;
+                closestAsteroid = asteroid;
+            }
+        });
+        
+        // Update laser targeting
+        if (closestAsteroid) {
+            this.currentLaserTarget = closestAsteroid;
+            this.updateLaserBeam(closestAsteroid.mesh);
+            
+            // Deal damage to targeted asteroid (apply weapon upgrade multiplier)
+            const weaponMultiplier = this.getWeaponMultiplier();
+            closestAsteroid.health -= deltaTime * weaponMultiplier;
+            
+            // Check if asteroid is destroyed
+            if (closestAsteroid.health <= 0) {
+                // Create particle explosion
+                this.createParticleExplosion(
+                    closestAsteroid.mesh.position.clone(),
+                    closestAsteroid.velocity.clone()
+                );
+                
+                // Remove asteroid from scene
+                this.scene.remove(closestAsteroid.mesh);
+                this.asteroids = this.asteroids.filter(a => a !== closestAsteroid);
+                
+                // Clear target so laser retargets
+                this.currentLaserTarget = null;
+                this.hideLaserBeam();
+                
+                console.log('Asteroid destroyed!');
+            }
+        } else {
+            this.currentLaserTarget = null;
+            this.hideLaserBeam();
+        }
         
         // Remove asteroids that are too far behind the player
         this.asteroids = this.asteroids.filter(asteroid => {
@@ -943,6 +1262,12 @@ class Game {
                 
                 // Flash the shield effect
                 this.flashShield();
+                
+                // Stop targeting this asteroid if it's currently targeted
+                if (this.currentLaserTarget === asteroid) {
+                    this.currentLaserTarget = null;
+                    this.hideLaserBeam();
+                }
                 
                 // Slow down the asteroid to 1/2 speed
                 asteroid.velocity.multiplyScalar(0.5);
@@ -1313,6 +1638,11 @@ class Game {
     }
 
     update(deltaTime) {
+        // Check for game over conditions
+        if (this.checkGameOverConditions()) {
+            return; // Stop updating if game is over
+        }
+        
         // Update game state
         this.gameState.time += deltaTime;
         
@@ -1339,8 +1669,10 @@ class Game {
         if (this.shipDebugMode) {
             this.fuelConsumptionTimer += deltaTime;
             if (this.fuelConsumptionTimer >= 1.0) {
-                // Consume fuel based on warp level: warp / 10 per second
-                const fuelConsumption = this.shipStats.warp / 10;
+                // Consume fuel based on warp level: warp / 10 per second (apply propulsion upgrade reduction)
+                const baseFuelConsumption = this.shipStats.warp / 10;
+                const fuelReduction = this.getFuelReduction();
+                const fuelConsumption = baseFuelConsumption * (1 - fuelReduction);
                 this.shipStats.fuel = Math.max(0, this.shipStats.fuel - fuelConsumption);
                 
                 // Update distance based on warp difference from equilibrium
@@ -1363,8 +1695,13 @@ class Game {
             }
         }
         
-        // Update asteroids
-        this.updateAsteroids(deltaTime);
+        // Update asteroids (only if not game over)
+        if (!this.isGameOver) {
+            this.updateAsteroids(deltaTime);
+        }
+        
+        // Update particles
+        this.updateParticles(deltaTime);
         
         // Update HUD bars if visible
         const hudBars = document.getElementById('hud-bars');
@@ -1581,15 +1918,469 @@ class Game {
     }
 
     gameOver() {
-        console.log('Game Over!');
+        console.log('Game Over! Consumed by the black hole.');
+        this.isGameOver = true;
         this.stop();
-        // Add game over logic here
+        
+        // Disable pointer lock so cursor is visible for clicking
+        if (this.inputHandler) {
+            this.inputHandler.disablePointerLock();
+        }
+        
+        // Show game over modal
+        const gameOverModal = document.getElementById('game-over-modal');
+        if (gameOverModal) {
+            gameOverModal.classList.add('show');
+        }
+    }
+    
+    checkGameOverConditions() {
+        // Check if distance reached 0 (pulled into event horizon)
+        if (this.shipStats.distance <= 0 && !this.isGameOver) {
+            this.gameOver();
+            return true;
+        }
+        return false;
+    }
+    
+    resetGame() {
+        console.log('Resetting game...');
+        
+        // Reset game over flag
+        this.isGameOver = false;
+        
+        // Reset ship stats
+        this.shipStats = {
+            warp: 2.2,
+            warpMax: 6.5,
+            fuel: 100,
+            fuelMax: 100,
+            iron: 0.0,
+            cargoMax: 20.0,
+            distance: 100.0
+        };
+        
+        // Reset timers
+        this.fuelConsumptionTimer = 0;
+        this.asteroidSpawnTimer = 0;
+        
+        // Remove all asteroids from scene (do this first)
+        console.log(`Removing ${this.asteroids.length} asteroids`);
+        this.asteroids.forEach(asteroid => {
+            if (asteroid.mesh && asteroid.mesh.parent) {
+                this.scene.remove(asteroid.mesh);
+                // Dispose of geometry and materials
+                if (asteroid.mesh.geometry) asteroid.mesh.geometry.dispose();
+                if (asteroid.mesh.material) {
+                    if (Array.isArray(asteroid.mesh.material)) {
+                        asteroid.mesh.material.forEach(mat => mat.dispose());
+                    } else {
+                        asteroid.mesh.material.dispose();
+                    }
+                }
+            }
+        });
+        this.asteroids = [];
+        console.log('All asteroids removed');
+        
+        // Remove all particles
+        console.log(`Removing ${this.particles.length} particles`);
+        this.particles.forEach(particle => {
+            if (particle.mesh) {
+                this.scene.remove(particle.mesh);
+                if (particle.mesh.geometry) particle.mesh.geometry.dispose();
+                if (particle.mesh.material) particle.mesh.material.dispose();
+            }
+        });
+        this.particles = [];
+        console.log('All particles removed');
+        
+        // Hide laser beam
+        this.hideLaserBeam();
+        this.currentLaserTarget = null;
+        
+        // Reset camera to initial position
+        this.camera.position.set(0, 8, 15);
+        this.camera.lookAt(0, 0, 0);
+        console.log('Camera reset to:', this.camera.position, 'looking at origin');
+        
+        // Reset ship to initial position
+        if (this.ship && this.shipAnimation && this.shipAnimation.waypoints.length > 0) {
+            const firstWaypoint = this.shipAnimation.waypoints[0];
+            this.ship.position.copy(firstWaypoint.position);
+            this.ship.rotation.copy(firstWaypoint.rotation);
+            console.log('Ship reset to:', this.ship.position);
+        }
+        
+        // Reset ship animation state
+        if (this.shipAnimation) {
+            this.shipAnimation.isAnimating = false;
+            this.shipAnimation.currentWaypoint = 0;
+            this.shipAnimation.startTime = 0;
+        }
+        
+        // Disable manual controls
+        this.shipDebugMode = false;
+        
+        // Clear ship home rotation
+        this.shipHomeRotation = null;
+        
+        // Hide UI elements
+        this.hideUIPanel();
+        
+        // Force a render to show the reset scene
+        this.render();
+        
+        console.log('Game reset complete');
     }
 
     nextLevel() {
         this.gameState.level++;
         console.log(`Level ${this.gameState.level}`);
         // Add level progression logic here
+    }
+    
+    // Upgrade Multiplier Helpers
+    getWeaponMultiplier() {
+        if (!this.ownedUpgrades.weapon || !this.weaponsData) return 1.0;
+        
+        const weapon = this.weaponsData.find(w => w.id === this.ownedUpgrades.weapon);
+        return weapon ? weapon.power : 1.0;
+    }
+    
+    getFuelReduction() {
+        if (!this.ownedUpgrades.engine || !this.enginesData) return 0.0;
+        
+        const engine = this.enginesData.find(e => e.id === this.ownedUpgrades.engine);
+        return engine ? (1.0 - engine.fuelEfficiency) : 0.0;
+    }
+    
+    getExtractorMultiplier() {
+        if (!this.ownedUpgrades.extractor || !this.extractorsData) return 1.0;
+        
+        const extractor = this.extractorsData.find(e => e.id === this.ownedUpgrades.extractor);
+        return extractor ? extractor.collectionMultiplier : 1.0;
+    }
+    
+    // Trading Station System
+    getUpgradeData() {
+        // Return the loaded JSON data
+        return {
+            ships: this.shipsData || [],
+            weapons: this.weaponsData || [],
+            propulsion: this.enginesData || [],
+            extractors: this.extractorsData || []
+        };
+    }
+    
+    setupStationViewer() {
+        const viewerContainer = document.getElementById('station-ship-viewer');
+        if (!viewerContainer) return;
+        
+        // Create separate scene and camera for station
+        this.stationScene = new THREE.Scene();
+        this.stationCamera = new THREE.PerspectiveCamera(
+            45,
+            viewerContainer.clientWidth / viewerContainer.clientHeight,
+            0.1,
+            1000
+        );
+        this.stationCamera.position.set(5, 3, 8);
+        this.stationCamera.lookAt(0, 0, 0);
+        
+        // Create renderer for station viewer
+        this.stationRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.stationRenderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
+        this.stationRenderer.setClearColor(0x000000, 0);
+        viewerContainer.appendChild(this.stationRenderer.domElement);
+        
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        this.stationScene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        this.stationScene.add(directionalLight);
+        
+        // Clone the player's ship for display
+        if (this.ship) {
+            this.stationShip = this.ship.clone();
+            this.stationShip.position.set(0, 0, 0);
+            this.stationShip.rotation.set(0, 0, 0);
+            this.stationScene.add(this.stationShip);
+        }
+        
+        // Start rotation animation
+        const rotateShip = () => {
+            if (this.stationShip && document.getElementById('station-modal').classList.contains('show')) {
+                this.stationShip.rotation.y += 0.01;
+                this.stationRenderer.render(this.stationScene, this.stationCamera);
+                requestAnimationFrame(rotateShip);
+            }
+        };
+        rotateShip();
+    }
+    
+    openTradingStation() {
+        console.log('Opening trading station...');
+        
+        // Pause game
+        this.stop();
+        
+        // Disable pointer lock
+        if (this.inputHandler) {
+            this.inputHandler.disablePointerLock();
+        }
+        
+        // Sell cargo
+        const ironSold = this.shipStats.iron;
+        const cargoValue = Math.floor(ironSold * this.ironPrice);
+        this.credits += cargoValue;
+        this.shipStats.iron = 0; // Clear cargo
+        
+        console.log(`Sold ${ironSold.toFixed(1)}t iron for ${cargoValue} credits. Total: ${this.credits}`);
+        
+        // Update UI
+        this.updateStationUI(cargoValue, ironSold);
+        
+        // Setup 3D viewer
+        setTimeout(() => this.setupStationViewer(), 100);
+        
+        // Populate upgrades
+        this.populateStationUpgrades();
+        
+        // Populate mineral markets
+        this.populateMineralMarkets();
+        
+        // Show modal
+        const modal = document.getElementById('station-modal');
+        if (modal) {
+            modal.classList.add('show');
+        }
+        
+        // Setup tab switching
+        this.setupStationTabs();
+        
+        // Setup return button
+        const returnBtn = document.getElementById('station-return-btn');
+        if (returnBtn) {
+            returnBtn.onclick = () => this.closeTradingStation();
+        }
+    }
+    
+    closeTradingStation() {
+        console.log('Closing trading station...');
+        
+        // Hide modal
+        const modal = document.getElementById('station-modal');
+        if (modal) {
+            modal.classList.remove('show');
+        }
+        
+        // Clean up station renderer
+        if (this.stationRenderer) {
+            const viewerContainer = document.getElementById('station-ship-viewer');
+            if (viewerContainer && this.stationRenderer.domElement) {
+                viewerContainer.removeChild(this.stationRenderer.domElement);
+            }
+            this.stationRenderer.dispose();
+            this.stationRenderer = null;
+        }
+        
+        // Clear station scene
+        if (this.stationShip) {
+            this.stationScene.remove(this.stationShip);
+            this.stationShip = null;
+        }
+        
+        // Resume game
+        this.start();
+    }
+    
+    updateStationUI(cargoValue, ironSold) {
+        const creditsEl = document.getElementById('station-credits');
+        const cargoValueEl = document.getElementById('station-cargo-value');
+        const ironSoldEl = document.getElementById('station-iron-sold');
+        
+        if (creditsEl) creditsEl.textContent = this.credits;
+        if (cargoValueEl) cargoValueEl.textContent = cargoValue;
+        if (ironSoldEl) ironSoldEl.textContent = ironSold.toFixed(1) + 't';
+        
+        // Update HUD bars
+        this.updateHudBars();
+    }
+    
+    setupStationTabs() {
+        const tabs = document.querySelectorAll('.station-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+                
+                // Remove active from all tabs and contents
+                document.querySelectorAll('.station-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.station-tab-content').forEach(c => c.classList.remove('active'));
+                
+                // Add active to clicked tab and corresponding content
+                tab.classList.add('active');
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+            });
+        });
+    }
+    
+    populateStationUpgrades() {
+        const upgradeData = this.getUpgradeData();
+        
+        // Map category to owned upgrade key
+        const categoryToKey = {
+            'ships': 'ship',
+            'weapons': 'weapon',
+            'propulsion': 'engine',
+            'extractors': 'extractor'
+        };
+        
+        // Populate each tab
+        Object.keys(upgradeData).forEach(category => {
+            const tabContent = document.getElementById(`tab-${category}`);
+            if (!tabContent) return;
+            
+            tabContent.innerHTML = '';
+            
+            upgradeData[category].forEach(item => {
+                const ownershipKey = categoryToKey[category];
+                const isOwned = this.ownedUpgrades[ownershipKey] === item.id;
+                const canAfford = this.credits >= item.price;
+                
+                // Build detailed description based on category
+                let detailsHTML = `<p>${item.description}</p>`;
+                
+                if (category === 'ships' && item.stats) {
+                    detailsHTML += `<p style="color: #00ffff; font-size: 12px; margin-top: 5px;">
+                        Warp: ${item.stats.warpMax} | Fuel: ${item.stats.fuelMax} | Cargo: ${item.stats.cargoMax}t | Slots: ${item.extractorSlots}
+                    </p>`;
+                } else if (category === 'weapons') {
+                    detailsHTML += `<p style="color: #00ffff; font-size: 12px; margin-top: 5px;">
+                        Range: ${item.range} | Power: ${item.power}x
+                    </p>`;
+                } else if (category === 'propulsion') {
+                    detailsHTML += `<p style="color: #00ffff; font-size: 12px; margin-top: 5px;">
+                        Max Warp: ${item.maxWarpSpeed} | Fuel Efficiency: ${Math.round(item.fuelEfficiency * 100)}%
+                    </p>`;
+                } else if (category === 'extractors') {
+                    detailsHTML += `<p style="color: #00ffff; font-size: 12px; margin-top: 5px;">
+                        Collection: ${item.collectionMultiplier}x | Elements: ${item.elements.length}
+                    </p>`;
+                }
+                
+                const upgradeEl = document.createElement('div');
+                upgradeEl.className = 'upgrade-item';
+                upgradeEl.innerHTML = `
+                    <div class="upgrade-info">
+                        <h3>${item.name}</h3>
+                        ${detailsHTML}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="upgrade-price">${item.price === 0 ? 'Free' : item.price + ' CR'}</div>
+                        <button class="upgrade-buy-btn" 
+                                ${isOwned || !canAfford ? 'disabled' : ''}
+                                data-category="${category}"
+                                data-id="${item.id}"
+                                data-price="${item.price}">
+                            ${isOwned ? 'OWNED' : 'BUY'}
+                        </button>
+                    </div>
+                `;
+                
+                // Add click handler
+                const buyBtn = upgradeEl.querySelector('.upgrade-buy-btn');
+                if (buyBtn && !isOwned && canAfford) {
+                    buyBtn.addEventListener('click', () => {
+                        this.purchaseUpgrade(category, item);
+                    });
+                }
+                
+                tabContent.appendChild(upgradeEl);
+            });
+        });
+    }
+    
+    purchaseUpgrade(category, item) {
+        if (this.credits < item.price) {
+            console.log('Not enough credits!');
+            return;
+        }
+        
+        // Deduct credits
+        this.credits -= item.price;
+        
+        // Map category to owned upgrade key
+        const categoryToKey = {
+            'ships': 'ship',
+            'weapons': 'weapon',
+            'propulsion': 'engine',
+            'extractors': 'extractor'
+        };
+        
+        const upgradeCategoryKey = categoryToKey[category];
+        this.ownedUpgrades[upgradeCategoryKey] = item.id;
+        
+        // Apply stats based on category
+        if (category === 'ships' && item.stats) {
+            this.shipStats.warpMax = item.stats.warpMax;
+            this.shipStats.fuelMax = item.stats.fuelMax;
+            this.shipStats.cargoMax = item.stats.cargoMax;
+            // Refill fuel on ship purchase
+            this.shipStats.fuel = item.stats.fuelMax;
+        } else if (category === 'propulsion' && item.maxWarpSpeed) {
+            // Update warp max based on engine
+            this.shipStats.warpMax = item.maxWarpSpeed;
+        }
+        
+        console.log(`Purchased ${item.name} for ${item.price} credits`);
+        
+        // Refresh UI
+        this.updateStationUI(0, 0);
+        this.populateStationUpgrades();
+    }
+    
+    populateMineralMarkets() {
+        const marketsTab = document.getElementById('tab-markets');
+        if (!marketsTab || !this.lootTable) return;
+        
+        // Create table HTML
+        let tableHTML = `
+            <table class="mineral-table">
+                <thead>
+                    <tr>
+                        <th>Mineral</th>
+                        <th>Rarity</th>
+                        <th>Value</th>
+                        <th>Bonus Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        // Sort by value (high to low)
+        const sortedMinerals = [...this.lootTable].sort((a, b) => b.value - a.value);
+        
+        sortedMinerals.forEach(mineral => {
+            const rarityClass = `rarity-${mineral.rarity.toLowerCase()}`;
+            tableHTML += `
+                <tr>
+                    <td><span class="mineral-name">${mineral.name}</span></td>
+                    <td><span class="mineral-rarity ${rarityClass}">${mineral.rarity}</span></td>
+                    <td><span class="mineral-value">${mineral.value} CR</span></td>
+                    <td><span class="mineral-bonus">${mineral.bonus}</span></td>
+                </tr>
+            `;
+        });
+        
+        tableHTML += `
+                </tbody>
+            </table>
+        `;
+        
+        marketsTab.innerHTML = tableHTML;
     }
 }
 

@@ -270,6 +270,331 @@
         #controls-modal.show {
             display: flex;
         }
+        
+        /* Game Over Modal */
+        #game-over-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+        
+        #game-over-modal.show {
+            display: flex;
+        }
+        
+        .game-over-content {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2c2c2c 100%);
+            padding: 50px;
+            border-radius: 20px;
+            text-align: center;
+            border: 3px solid #ff0000;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+            max-width: 500px;
+        }
+        
+        .game-over-title {
+            font-size: 48px;
+            color: #ff0000;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
+            font-weight: bold;
+        }
+        
+        .game-over-message {
+            font-size: 20px;
+            color: #ffffff;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        /* Station Modal */
+        #station-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+            cursor: default;
+        }
+        
+        #station-modal.show {
+            display: flex;
+        }
+        
+        .station-content {
+            background: linear-gradient(135deg, #1a2332 0%, #2c3e50 100%);
+            padding: 40px;
+            border-radius: 20px;
+            border: 3px solid #00ffff;
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.4);
+            max-width: 1000px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .station-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .station-title {
+            font-size: 36px;
+            color: #00ffff;
+            text-shadow: 0 0 15px rgba(0, 255, 255, 0.8);
+            margin-bottom: 10px;
+        }
+        
+        .station-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 20px;
+        }
+        
+        .station-stat {
+            text-align: center;
+        }
+        
+        .station-stat-label {
+            font-size: 14px;
+            color: #888;
+            text-transform: uppercase;
+        }
+        
+        .station-stat-value {
+            font-size: 28px;
+            color: #00ff00;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.6);
+        }
+        
+        .station-body {
+            display: flex;
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .station-ship-display {
+            flex: 0 0 300px;
+            height: 300px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #00ffff;
+            border-radius: 10px;
+            position: relative;
+            cursor: default !important;
+        }
+        
+        .station-left-panel {
+            flex: 0 0 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .station-upgrades {
+            flex: 1;
+        }
+        
+        .station-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #00ffff;
+        }
+        
+        .station-tab {
+            padding: 12px 24px;
+            background: rgba(0, 255, 255, 0.1);
+            border: none;
+            color: #00ffff;
+            font-size: 16px;
+            cursor: pointer;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .station-tab:hover {
+            background: rgba(0, 255, 255, 0.2);
+        }
+        
+        .station-tab.active {
+            background: rgba(0, 255, 255, 0.3);
+            border-bottom: 3px solid #00ffff;
+        }
+        
+        .station-tab-content {
+            display: none;
+            min-height: 200px;
+        }
+        
+        .station-tab-content.active {
+            display: block;
+        }
+        
+        .upgrade-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .upgrade-info h3 {
+            color: #00ffff;
+            margin: 0 0 5px 0;
+            font-size: 18px;
+        }
+        
+        .upgrade-info p {
+            color: #ccc;
+            margin: 0;
+            font-size: 14px;
+        }
+        
+        .upgrade-price {
+            font-size: 20px;
+            color: #00ff00;
+            font-weight: bold;
+            margin-right: 15px;
+        }
+        
+        .upgrade-buy-btn {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upgrade-buy-btn:hover {
+            background: #00ff88;
+            transform: scale(1.05);
+        }
+        
+        .upgrade-buy-btn:disabled {
+            background: #555;
+            color: #888;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .station-return-btn {
+            background: #ff8800;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer !important;
+            width: 100%;
+            transition: all 0.3s;
+        }
+        
+        .station-return-btn:hover {
+            background: #ffa500;
+            transform: scale(1.05);
+        }
+        
+        /* Mineral Markets Table */
+        .mineral-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .mineral-table th {
+            background: rgba(0, 255, 255, 0.2);
+            color: #00ffff;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #00ffff;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        
+        .mineral-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+            color: #ccc;
+        }
+        
+        .mineral-table tr:hover {
+            background: rgba(0, 255, 255, 0.1);
+        }
+        
+        .mineral-name {
+            color: #fff;
+            font-weight: bold;
+            font-size: 15px;
+        }
+        
+        .mineral-rarity {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+        
+        .rarity-common {
+            background: rgba(128, 128, 128, 0.3);
+            color: #aaa;
+        }
+        
+        .rarity-uncommon {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+        }
+        
+        .rarity-rare {
+            background: rgba(0, 150, 255, 0.2);
+            color: #0096ff;
+        }
+        
+        .rarity-epic {
+            background: rgba(160, 32, 240, 0.2);
+            color: #a020f0;
+        }
+        
+        .rarity-legendary {
+            background: rgba(255, 165, 0, 0.2);
+            color: #ffa500;
+        }
+        
+        .mineral-value {
+            color: #00ff00;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .mineral-bonus {
+            font-size: 13px;
+            font-style: italic;
+            color: #aaa;
+        }
 
         .modal-content {
             background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
@@ -478,6 +803,81 @@
             <div style="margin-top: 20px; text-align: center;">
                 <button id="return-to-menu" class="menu-button" style="padding: 10px 20px; font-size: 16px; min-width: auto;">Return to Menu</button>
             </div>
+        </div>
+    </div>
+    
+    <!-- Game Over Modal -->
+    <div id="game-over-modal">
+        <div class="game-over-content">
+            <div class="game-over-title">CONSUMED BY THE VOID</div>
+            <div class="game-over-message">
+                Your ship was pulled into the event horizon and crushed by the immense gravitational forces of the black hole.
+            </div>
+            <button id="game-over-menu" class="menu-button">Return to Menu</button>
+        </div>
+    </div>
+    
+    <!-- Trading Station Modal -->
+    <div id="station-modal">
+        <div class="station-content">
+            <div class="station-header">
+                <h1 class="station-title">PROXIMA PROCESSING STATION</h1>
+                <div class="station-stats">
+                    <div class="station-stat">
+                        <div class="station-stat-label">Your Credits</div>
+                        <div class="station-stat-value" id="station-credits">0</div>
+                    </div>
+                    <div class="station-stat">
+                        <div class="station-stat-label">Cargo Value</div>
+                        <div class="station-stat-value" id="station-cargo-value">0</div>
+                    </div>
+                    <div class="station-stat">
+                        <div class="station-stat-label">Iron Sold</div>
+                        <div class="station-stat-value" id="station-iron-sold">0.0t</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="station-body">
+                <div class="station-left-panel">
+                    <div class="station-ship-display" id="station-ship-viewer">
+                        <!-- 3D ship will be rendered here -->
+                    </div>
+                    <button id="station-return-btn" class="station-return-btn">Return to Space</button>
+                </div>
+                
+                <div class="station-upgrades">
+                    <div class="station-tabs">
+                        <button class="station-tab active" data-tab="ships">Ships</button>
+                        <button class="station-tab" data-tab="weapons">Weapons</button>
+                        <button class="station-tab" data-tab="propulsion">Engines</button>
+                        <button class="station-tab" data-tab="extractors">Extractors</button>
+                        <button class="station-tab" data-tab="markets">Mineral Markets</button>
+                    </div>
+                    
+                    <div id="tab-ships" class="station-tab-content active">
+                        <!-- Ships content populated by JS -->
+                    </div>
+                    
+                    <div id="tab-weapons" class="station-tab-content">
+                        <!-- Weapons content populated by JS -->
+                    </div>
+                    
+                    <div id="tab-propulsion" class="station-tab-content">
+                        <!-- Propulsion content populated by JS -->
+                    </div>
+                    
+                    <div id="tab-extractors" class="station-tab-content">
+                        <!-- Extractors content populated by JS -->
+                    </div>
+                    
+                    <div id="tab-markets" class="station-tab-content">
+                        <!-- Mineral markets content populated by JS -->
+                    </div>
+                </div>
+            </div>
+            
+            <button id="station-return-btn" class="station-return-btn">Return to Space</button>
         </div>
     </div>
 

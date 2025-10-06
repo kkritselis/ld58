@@ -1,0 +1,37 @@
+{
+    "extractors": [
+        {
+            "id": "basic_collector",
+            "name": "Basic Particle Collector",
+            "description": "Standard tractor beam for mineral collection.",
+            "price": 0,
+            "collectionMultiplier": 1.0,
+            "elements": ["Iron", "Iridium", "Platinum"]
+        },
+        {
+            "id": "collector_mk2",
+            "name": "Particle Collector Mk II",
+            "description": "Enhanced magnetic field collects 50% more minerals from explosions.",
+            "price": 2500,
+            "collectionMultiplier": 1.5,
+            "elements": ["Iron", "Iridium", "Osmium", "Platinum", "Tantalum", "Scandium"]
+        },
+        {
+            "id": "collector_mk3",
+            "name": "Particle Collector Mk III",
+            "description": "Advanced graviton beam collects 100% more minerals and rare elements.",
+            "price": 6000,
+            "collectionMultiplier": 2.0,
+            "elements": ["Iron", "Iridium", "Osmium", "Platinum", "Thorium Isotopes", "Helium-3", "Tantalum", "Scandium", "Neutronium Shard"]
+        },
+        {
+            "id": "quantum_collector",
+            "name": "Quantum Collector",
+            "description": "Experimental technology attracts even the rarest exotic particles.",
+            "price": 15000,
+            "collectionMultiplier": 3.0,
+            "elements": ["Iron", "Iridium", "Osmium", "Platinum", "Thorium Isotopes", "Helium-3", "Tantalum", "Scandium", "Neutronium Shard", "Strange Matter Droplet", "Singularity Diamond", "Chronotite", "Voidstone", "Gravitonium"]
+        }
+    ]
+}
+

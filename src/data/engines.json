@@ -1,0 +1,37 @@
+{
+    "engines": [
+        {
+            "id": "standard_drive",
+            "name": "Standard Warp Drive",
+            "description": "Basic warp drive with standard fuel consumption.",
+            "price": 0,
+            "maxWarpSpeed": 6.5,
+            "fuelEfficiency": 1.0
+        },
+        {
+            "id": "efficient_drive",
+            "name": "Efficient Drive",
+            "description": "Optimized fuel injection reduces consumption by 25%.",
+            "price": 2000,
+            "maxWarpSpeed": 7.0,
+            "fuelEfficiency": 0.75
+        },
+        {
+            "id": "advanced_drive",
+            "name": "Advanced Drive",
+            "description": "Quantum-assisted combustion reduces consumption by 50%.",
+            "price": 4500,
+            "maxWarpSpeed": 8.0,
+            "fuelEfficiency": 0.5
+        },
+        {
+            "id": "hyperspace_drive",
+            "name": "Hyperspace Drive",
+            "description": "Experimental drive technology. Maximum speed with minimal fuel usage.",
+            "price": 12000,
+            "maxWarpSpeed": 11.0,
+            "fuelEfficiency": 0.3
+        }
+    ]
+}
+

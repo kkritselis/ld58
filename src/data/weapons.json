@@ -1,0 +1,37 @@
+{
+    "weapons": [
+        {
+            "id": "laser_mk1",
+            "name": "Mining Laser Mk I",
+            "description": "Standard mining laser. Reliable but slow.",
+            "price": 0,
+            "range": 30,
+            "power": 1.0
+        },
+        {
+            "id": "laser_mk2",
+            "name": "Mining Laser Mk II",
+            "description": "Upgraded focusing array destroys asteroids 25% faster.",
+            "price": 1500,
+            "range": 35,
+            "power": 1.25
+        },
+        {
+            "id": "laser_mk3",
+            "name": "Mining Laser Mk III",
+            "description": "Advanced beam emitter destroys asteroids 50% faster.",
+            "price": 3500,
+            "range": 40,
+            "power": 1.5
+        },
+        {
+            "id": "plasma_cutter",
+            "name": "Plasma Cutter",
+            "description": "Superheated plasma stream tears through asteroids instantly.",
+            "price": 10000,
+            "range": 45,
+            "power": 10.0
+        }
+    ]
+}
+

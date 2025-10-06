@@ -1,0 +1,44 @@
+{
+    "ships": [
+        {
+            "id": "base_ship",
+            "name": "Salvager-Class",
+            "description": "Your starting vessel. Reliable and efficient for basic salvage operations.",
+            "price": 0,
+            "extractorSlots": 1,
+            "model": "base_ship.glb",
+            "stats": {
+                "warpMax": 6.5,
+                "fuelMax": 100,
+                "cargoMax": 20.0
+            }
+        },
+        {
+            "id": "hauler",
+            "name": "Hauler-Class",
+            "description": "Increased cargo capacity and fuel efficiency. Built for long haul operations near the event horizon.",
+            "price": 5000,
+            "extractorSlots": 2,
+            "model": "base_ship.glb",
+            "stats": {
+                "warpMax": 7.5,
+                "fuelMax": 150,
+                "cargoMax": 40.0
+            }
+        },
+        {
+            "id": "racer",
+            "name": "Racer-Class",
+            "description": "Maximum speed and maneuverability. Sacrifices cargo space for enhanced engines.",
+            "price": 8000,
+            "extractorSlots": 1,
+            "model": "base_ship.glb",
+            "stats": {
+                "warpMax": 9.5,
+                "fuelMax": 120,
+                "cargoMax": 15.0
+            }
+        }
+    ]
+}
+

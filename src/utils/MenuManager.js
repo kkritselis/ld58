@@ -2,9 +2,11 @@ class MenuManager {
     constructor() {
         this.menu = null;
         this.controlsModal = null;
+        this.gameOverModal = null;
         this.startButton = null;
         this.controlsButton = null;
         this.modalCloseButton = null;
+        this.gameOverMenuButton = null;
         this.musicVolumeSlider = null;
         this.sfxVolumeSlider = null;
         this.musicValueDisplay = null;
@@ -22,9 +24,11 @@ class MenuManager {
         // Get DOM elements
         this.menu = document.getElementById('menu');
         this.controlsModal = document.getElementById('controls-modal');
+        this.gameOverModal = document.getElementById('game-over-modal');
         this.startButton = document.getElementById('start-button');
         this.controlsButton = document.getElementById('controls-button');
         this.modalCloseButton = document.getElementById('modal-close');
+        this.gameOverMenuButton = document.getElementById('game-over-menu');
         this.musicVolumeSlider = document.getElementById('music-volume');
         this.sfxVolumeSlider = document.getElementById('sfx-volume');
         this.musicValueDisplay = document.getElementById('music-value');
@@ -120,6 +124,12 @@ class MenuManager {
         this.returnToMenuButton.addEventListener('click', () => {
             this.audioManager.playSFX('select');
             this.returnToMenu();
+        });
+        
+        // Game over menu button
+        this.gameOverMenuButton.addEventListener('click', () => {
+            this.audioManager.playSFX('select');
+            this.returnToMenuFromGameOver();
         });
 
         // Keyboard shortcuts
@@ -311,5 +321,53 @@ class MenuManager {
         
         // Restart menu music when returning to menu
         this.startMenuMusic();
+    }
+    
+    // Return to menu from game over screen
+    returnToMenuFromGameOver() {
+        console.log('Returning to menu from game over...');
+        
+        // Hide game over modal
+        if (this.gameOverModal) {
+            this.gameOverModal.classList.remove('show');
+        }
+        
+        // Reset game state
+        if (this.game) {
+            this.game.resetGame(); // Properly reset everything
+            this.game.inputHandler.disablePointerLock();
+            
+            // Force a few more renders to ensure scene is updated
+            setTimeout(() => {
+                if (this.game && this.game.renderer && this.game.scene && this.game.camera) {
+                    this.game.render();
+                    console.log('Additional render after reset');
+                }
+            }, 100);
+        }
+        
+        // Stop game music and return to menu
+        this.audioManager.stopMusic();
+        this.showMenu();
+        this.isGameStarted = false;
+        
+        // Show scrolling text again
+        const scrollingText = document.getElementById('scrolling-text');
+        if (scrollingText) {
+            scrollingText.style.display = 'block';
+            scrollingText.style.opacity = '1';
+        }
+        
+        // Show title again
+        const title = document.getElementById('title');
+        if (title) {
+            title.style.display = 'block';
+            title.style.opacity = '1';
+        }
+        
+        // Restart menu music
+        this.startMenuMusic();
+        
+        console.log('Return to menu complete');
     }
 }
