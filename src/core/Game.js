@@ -72,8 +72,26 @@ class Game {
         // Particle system for explosions
         this.particles = [];
         
+        // Debris stream system
+        this.debrisParticles = [];
+        this.debrisSpawnTimer = 0;
+        this.debrisSpawnInterval = 0.1; // Spawn debris every 0.1 seconds
+        this.passiveIronTimer = 0;
+        this.passiveIronInterval = 1.0; // Collect passive iron every second
+        
         // Game over state
         this.isGameOver = false;
+        
+        // Tutorial message tracking
+        this.tutorialShown = {
+            shieldHit: false,
+            asteroidDestroyed: false,
+            cargoFull: false,
+            controls: false
+        };
+        
+        // Warning states
+        this.dangerWarningShown = false;
     }
 
     async init() {
@@ -1074,6 +1092,129 @@ class Game {
         });
     }
     
+    spawnDebrisParticle() {
+        if (!this.ship || !this.camera) return;
+        
+        // Spawn particles in front of the camera view, always streaming towards camera
+        // Get camera's forward direction
+        const cameraDirection = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDirection);
+        
+        // Spawn particles ahead of the camera (in its view)
+        const spawnDistance = 40 + Math.random() * 30; // 40-70 units ahead
+        const horizontalSpread = (Math.random() - 0.5) * 60; // Wide horizontal spread
+        const verticalSpread = (Math.random() - 0.5) * 20; // Less vertical spread
+        
+        // Start from camera position and move forward
+        const spawnPosition = this.camera.position.clone();
+        spawnPosition.add(cameraDirection.clone().multiplyScalar(spawnDistance));
+        
+        // Add horizontal spread (perpendicular to camera direction)
+        const right = new THREE.Vector3();
+        right.crossVectors(cameraDirection, this.camera.up).normalize();
+        spawnPosition.add(right.multiplyScalar(horizontalSpread));
+        
+        // Add vertical spread (along camera's up vector)
+        const up = this.camera.up.clone();
+        spawnPosition.add(up.multiplyScalar(verticalSpread));
+        
+        // Small debris size
+        const size = 0.1 + Math.random() * 0.2;
+        const geometries = [
+            new THREE.BoxGeometry(size, size, size),
+            new THREE.TetrahedronGeometry(size * 0.8),
+            new THREE.OctahedronGeometry(size * 0.6)
+        ];
+        const geometry = geometries[Math.floor(Math.random() * geometries.length)];
+        
+        // Gray/brown colors for space debris
+        const colors = [0x555555, 0x666666, 0x777777, 0x8B7355, 0x704214];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        const material = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.copy(spawnPosition);
+        
+        // Random initial rotation
+        mesh.rotation.set(
+            Math.random() * Math.PI * 2,
+            Math.random() * Math.PI * 2,
+            Math.random() * Math.PI * 2
+        );
+        
+        this.scene.add(mesh);
+        
+        // Calculate velocity towards camera (backwards from spawn point)
+        // Speed is based on warp level for sense of motion
+        const directionToCamera = cameraDirection.clone().negate(); // Opposite of camera forward
+        const baseSpeed = 15 + (this.shipStats.warp * 3); // Speed scales with warp
+        const velocity = directionToCamera.multiplyScalar(baseSpeed);
+        
+        // Random rotation speed
+        const rotationSpeed = {
+            x: (Math.random() - 0.5) * 3,
+            y: (Math.random() - 0.5) * 3,
+            z: (Math.random() - 0.5) * 3
+        };
+        
+        this.debrisParticles.push({
+            mesh: mesh,
+            velocity: velocity,
+            rotationSpeed: rotationSpeed,
+            lifetime: 10.0,
+            age: 0
+        });
+    }
+    
+    updateDebrisParticles(deltaTime) {
+        if (!this.ship || !this.camera) return;
+        
+        // Get camera direction once per frame
+        const cameraDirection = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDirection);
+        const directionToCamera = cameraDirection.clone().negate();
+        
+        this.debrisParticles = this.debrisParticles.filter(debris => {
+            // Age the debris
+            debris.age += deltaTime;
+            
+            // Remove if too old or if it's passed behind the camera
+            const distanceFromCamera = debris.mesh.position.distanceTo(this.camera.position);
+            if (debris.age >= debris.lifetime || distanceFromCamera < 5) {
+                this.scene.remove(debris.mesh);
+                if (debris.mesh.geometry) debris.mesh.geometry.dispose();
+                if (debris.mesh.material) debris.mesh.material.dispose();
+                return false;
+            }
+            
+            // Update velocity based on current warp (always towards camera)
+            const baseSpeed = 15 + (this.shipStats.warp * 3);
+            debris.velocity = directionToCamera.clone().multiplyScalar(baseSpeed);
+            
+            // Move debris towards camera
+            debris.mesh.position.add(debris.velocity.clone().multiplyScalar(deltaTime));
+            
+            // Rotate debris
+            debris.mesh.rotation.x += debris.rotationSpeed.x * deltaTime;
+            debris.mesh.rotation.y += debris.rotationSpeed.y * deltaTime;
+            debris.mesh.rotation.z += debris.rotationSpeed.z * deltaTime;
+            
+            // Fade out as it gets older
+            const fadeStart = debris.lifetime * 0.6;
+            if (debris.age > fadeStart) {
+                const fadeProgress = (debris.age - fadeStart) / (debris.lifetime - fadeStart);
+                debris.mesh.material.opacity = 0.8 * (1.0 - fadeProgress);
+            }
+            
+            return true;
+        });
+    }
+    
     async loadAsteroidModels() {
         console.log('Loading asteroid models...');
         const modelPaths = [
@@ -1220,6 +1361,12 @@ class Game {
                 this.currentLaserTarget = null;
                 this.hideLaserBeam();
                 
+                // Show tutorial message on first asteroid destruction
+                if (!this.tutorialShown.asteroidDestroyed) {
+                    this.showTutorialMessage("Fly through the debris field to capture more elements", 'warning', 6000);
+                    this.tutorialShown.asteroidDestroyed = true;
+                }
+                
                 console.log('Asteroid destroyed!');
             }
         } else {
@@ -1262,6 +1409,12 @@ class Game {
                 
                 // Flash the shield effect
                 this.flashShield();
+                
+                // Show tutorial message on first shield hit
+                if (!this.tutorialShown.shieldHit) {
+                    this.showTutorialMessage("Try to avoid hitting the asteroids, they knock you closer to the black hole", 'warning', 6000);
+                    this.tutorialShown.shieldHit = true;
+                }
                 
                 // Stop targeting this asteroid if it's currently targeted
                 if (this.currentLaserTarget === asteroid) {
@@ -1412,6 +1565,13 @@ class Game {
                 anim.isAnimating = false;
                 this.shipDebugMode = true; // Enable manual controls
                 this.showUIPanel(); // Show UI panel
+                
+                // Show controls hint
+                if (!this.tutorialShown.controls) {
+                    this.showTutorialMessage("WASD controls / ARROW keys for acceleration / SPACEBAR for hyperjump", 'warning', 7000);
+                    this.tutorialShown.controls = true;
+                }
+                
                 console.log('Ship animation complete - manual controls enabled');
             }
         }
@@ -1703,10 +1863,43 @@ class Game {
         // Update particles
         this.updateParticles(deltaTime);
         
+        // Update debris stream (when in manual control)
+        if (this.shipDebugMode) {
+            // Spawn debris particles
+            this.debrisSpawnTimer += deltaTime;
+            if (this.debrisSpawnTimer >= this.debrisSpawnInterval) {
+                // Spawn multiple debris particles for dense effect (doubled)
+                for (let i = 0; i < 6; i++) {
+                    this.spawnDebrisParticle();
+                }
+                this.debrisSpawnTimer = 0;
+            }
+            
+            // Update debris particles
+            this.updateDebrisParticles(deltaTime);
+            
+            // Passive iron collection from debris stream
+            this.passiveIronTimer += deltaTime;
+            if (this.passiveIronTimer >= this.passiveIronInterval) {
+                // Collect small amount of iron passively (0.05 - 0.15 tons per second)
+                const passiveIronAmount = 0.05 + Math.random() * 0.1;
+                const extractorMultiplier = this.getExtractorMultiplier();
+                const ironCollected = passiveIronAmount * extractorMultiplier;
+                this.shipStats.iron = Math.min(this.shipStats.cargoMax, this.shipStats.iron + ironCollected);
+                this.passiveIronTimer = 0;
+            }
+        }
+        
         // Update HUD bars if visible
         const hudBars = document.getElementById('hud-bars');
         if (hudBars && hudBars.classList.contains('visible')) {
             this.updateHudBars();
+            
+            // Check if cargo is full and show tutorial message
+            if (this.shipStats.iron >= this.shipStats.cargoMax && !this.tutorialShown.cargoFull) {
+                this.showTutorialMessage("The Cargo hold is full! Great job! Now hit the SPACEBAR to initiate the hyperjump to the nearest processing planet.", 'warning', 8000);
+                this.tutorialShown.cargoFull = true;
+            }
         }
         
         // Update distance display if visible
@@ -1718,6 +1911,25 @@ class Game {
         // Update debug info (only if debug mode is enabled)
         if (this.debugMode) {
             this.updateDebugInfo();
+        }
+        
+        // Update danger warning and overlay based on distance
+        if (this.shipDebugMode) {
+            // Show danger warning when distance < 40
+            if (this.shipStats.distance < 40 && !this.dangerWarningShown) {
+                this.showTutorialMessage("DANGER: Approaching Event Horizon", 'danger', 0); // 0 = stays visible
+                this.dangerWarningShown = true;
+            } else if (this.shipStats.distance >= 40 && this.dangerWarningShown) {
+                // Hide danger warning if player escapes
+                const messageEl = document.getElementById('tutorial-message');
+                if (messageEl && messageEl.classList.contains('danger')) {
+                    messageEl.style.display = 'none';
+                }
+                this.dangerWarningShown = false;
+            }
+            
+            // Update red screen overlay (progressive red when distance < 20)
+            this.updateDangerOverlay();
         }
     }
 
@@ -1995,6 +2207,18 @@ class Game {
         this.particles = [];
         console.log('All particles removed');
         
+        // Remove all debris particles
+        console.log(`Removing ${this.debrisParticles.length} debris particles`);
+        this.debrisParticles.forEach(debris => {
+            if (debris.mesh) {
+                this.scene.remove(debris.mesh);
+                if (debris.mesh.geometry) debris.mesh.geometry.dispose();
+                if (debris.mesh.material) debris.mesh.material.dispose();
+            }
+        });
+        this.debrisParticles = [];
+        console.log('All debris particles removed');
+        
         // Hide laser beam
         this.hideLaserBeam();
         this.currentLaserTarget = null;
@@ -2038,6 +2262,38 @@ class Game {
         this.gameState.level++;
         console.log(`Level ${this.gameState.level}`);
         // Add level progression logic here
+    }
+    
+    // Tutorial and Warning System
+    showTutorialMessage(message, type = 'warning', duration = 5000) {
+        const messageEl = document.getElementById('tutorial-message');
+        if (!messageEl) return;
+        
+        messageEl.textContent = message;
+        messageEl.className = type; // 'warning' or 'danger'
+        messageEl.style.display = 'block';
+        
+        // Auto-hide after duration
+        setTimeout(() => {
+            messageEl.style.display = 'none';
+        }, duration);
+    }
+    
+    updateDangerOverlay() {
+        const overlayEl = document.getElementById('danger-overlay');
+        if (!overlayEl) return;
+        
+        const distance = this.shipStats.distance;
+        
+        if (distance < 20) {
+            // Progressive red screen: opacity increases as distance approaches 0
+            // At 20 clicks: 0% opacity
+            // At 0 clicks: 80% opacity
+            const opacity = ((20 - distance) / 20) * 0.8;
+            overlayEl.style.opacity = opacity;
+        } else {
+            overlayEl.style.opacity = 0;
+        }
     }
     
     // Upgrade Multiplier Helpers
@@ -2132,6 +2388,14 @@ class Game {
             this.inputHandler.disablePointerLock();
         }
         
+        // Force exit pointer lock (backup)
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+        
+        // Ensure cursor is visible
+        document.body.style.cursor = 'default';
+        
         // Sell cargo
         const ironSold = this.shipStats.iron;
         const cargoValue = Math.floor(ironSold * this.ironPrice);
@@ -2171,6 +2435,9 @@ class Game {
     closeTradingStation() {
         console.log('Closing trading station...');
         
+        // Reset cursor style
+        document.body.style.cursor = '';
+        
         // Hide modal
         const modal = document.getElementById('station-modal');
         if (modal) {
@@ -2192,6 +2459,41 @@ class Game {
             this.stationScene.remove(this.stationShip);
             this.stationShip = null;
         }
+        
+        // Reset stats for new mission
+        this.shipStats.fuel = this.shipStats.fuelMax;
+        this.shipStats.distance = 100.0;
+        this.shipStats.warp = 2.2; // Reset to equilibrium warp
+        
+        // Reset timers
+        this.fuelConsumptionTimer = 0;
+        this.debrisSpawnTimer = 0;
+        this.passiveIronTimer = 0;
+        
+        // Reset tutorial flags for new mission
+        this.tutorialShown.shieldHit = false;
+        this.tutorialShown.asteroidDestroyed = false;
+        this.tutorialShown.cargoFull = false;
+        this.tutorialShown.controls = false;
+        this.dangerWarningShown = false;
+        
+        // Hide any visible messages
+        const messageEl = document.getElementById('tutorial-message');
+        if (messageEl) {
+            messageEl.style.display = 'none';
+        }
+        
+        // Reset danger overlay
+        const overlayEl = document.getElementById('danger-overlay');
+        if (overlayEl) {
+            overlayEl.style.opacity = 0;
+        }
+        
+        // Update HUD to show new values
+        this.updateHudBars();
+        this.updateDistanceDisplay();
+        
+        console.log('New mission started: Fuel refilled, distance reset to 100 clicks');
         
         // Resume game
         this.start();

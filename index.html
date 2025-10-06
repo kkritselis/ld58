@@ -326,11 +326,19 @@
             justify-content: center;
             align-items: center;
             z-index: 3000;
-            cursor: default;
+            cursor: default !important;
         }
         
         #station-modal.show {
             display: flex;
+        }
+        
+        #station-modal * {
+            cursor: default !important;
+        }
+        
+        #station-modal button {
+            cursor: pointer !important;
         }
         
         .station-content {
@@ -343,6 +351,7 @@
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
+            cursor: default !important;
         }
         
         .station-header {
@@ -406,6 +415,8 @@
         
         .station-upgrades {
             flex: 1;
+            overflow-y: auto;
+            max-height: calc(80vh - 250px);
         }
         
         .station-tabs {
@@ -594,6 +605,56 @@
             font-size: 13px;
             font-style: italic;
             color: #aaa;
+        }
+        
+        /* Tutorial Messages */
+        #tutorial-message {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            z-index: 100;
+            display: none;
+            max-width: 80%;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        #tutorial-message.warning {
+            color: #ffff00;
+            text-shadow: 0 0 10px rgba(255, 255, 0, 0.8);
+            border: 2px solid #ffff00;
+        }
+        
+        #tutorial-message.danger {
+            color: #ff0000;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+            border: 2px solid #ff0000;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* Red danger overlay */
+        #danger-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 0, 0, 0) 0%, rgba(255, 0, 0, 0.5) 100%);
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
 
         .modal-content {
@@ -876,8 +937,6 @@
                     </div>
                 </div>
             </div>
-            
-            <button id="station-return-btn" class="station-return-btn">Return to Space</button>
         </div>
     </div>
 
@@ -885,6 +944,8 @@
         <div id="ui">
             <div id="loading">Loading...</div>
             <div id="debug"></div>
+            <div id="tutorial-message"></div>
+            <div id="danger-overlay"></div>
             <div id="ui-panel"></div>
             <img id="black-hud" src="assets/textures/black_hud.gif" alt="HUD">
             
