@@ -237,18 +237,22 @@ ld58/
 ## Technical Architecture
 
 ### Core Systems
-- **Game.js**: Main game loop, scene management, asteroid spawning
-- **MenuManager.js**: Menu system, game state transitions
+- **Game.js**: Main game loop, scene management, asteroid spawning, upgrade system
+- **MenuManager.js**: Menu system, game state transitions, trading station UI
 - **InputHandler.js**: Keyboard and mouse input handling
-- **AssetLoader.js**: GLB model loading and caching
+- **AssetLoader.js**: GLB model loading and JSON data loading
 - **AudioManager.js**: Music and sound effects
 
 ### Key Features
 - **Waypoint Animation System**: Smooth camera transitions between points
 - **Particle System**: Dynamic explosion effects with physics
+- **Debris Stream System**: Camera-space particles for motion feedback
 - **Laser Targeting**: Distance-based automatic targeting with line rendering
-- **Resource Management**: Fuel consumption and cargo tracking
+- **Resource Management**: Fuel consumption, cargo tracking, and currency
 - **Collision Detection**: Sphere-based collision with shield effects
+- **Trading Station**: 3D ship viewer with tabbed upgrade interface
+- **Tutorial System**: Context-sensitive hints and warnings
+- **Upgrade System**: JSON-driven progression with stat effects
 
 ## Browser Compatibility
 
@@ -269,11 +273,14 @@ Requires WebGL support and ES6 module compatibility.
 ## Development
 
 Built for Ludum Dare 58 in 48 hours. The game demonstrates:
-- Procedural content generation (asteroids, particles, stars)
+- Procedural content generation (asteroids, particles, stars, debris streams)
 - Physics-based gameplay mechanics
 - Real-time resource management
 - 3D rendering with Three.js r180
 - Audio and visual feedback systems
+- Data-driven progression with JSON
+- Economy and upgrade systems
+- Context-aware tutorial system
 
 ## Credits
 

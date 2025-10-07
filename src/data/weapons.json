@@ -12,7 +12,7 @@
             "id": "laser_mk2",
             "name": "Mining Laser Mk II",
             "description": "Upgraded focusing array destroys asteroids 25% faster.",
-            "price": 1500,
+            "price": 800,
             "range": 35,
             "power": 1.25
         },
@@ -20,7 +20,7 @@
             "id": "laser_mk3",
             "name": "Mining Laser Mk III",
             "description": "Advanced beam emitter destroys asteroids 50% faster.",
-            "price": 3500,
+            "price": 1500,
             "range": 40,
             "power": 1.5
         },

@@ -49,8 +49,10 @@ class Game {
         // Fuel consumption timer
         this.fuelConsumptionTimer = 0;
         
-        // Equilibrium warp speed (neither approaching nor escaping)
-        this.equilibriumWarp = 2.2;
+        // Base equilibrium warp speed (neither approaching nor escaping)
+        this.baseEquilibriumWarp = 2.2;
+        // Maximum cargo drag added to equilibrium (at 100% cargo)
+        this.maxCargoDrag = 5.8; // Full cargo requires 8.0 warp to maintain position!
         
         // Trading station
         this.stationScene = null;
@@ -92,6 +94,155 @@ class Game {
         
         // Warning states
         this.dangerWarningShown = false;
+        
+        // Screen shake system
+        this.screenShake = {
+            intensity: 0,
+            duration: 0,
+            timer: 0,
+            basePosition: new THREE.Vector3()
+        };
+        
+        // HUD impact shake system (separate from distance-based jitter)
+        this.hudImpactShake = {
+            intensity: 0,
+            duration: 0,
+            timer: 0
+        };
+        
+        // Audio system
+        this.audio = {
+            intro: null,
+            menu: null,
+            warp: null,
+            laser: null,
+            hits: [], // Array for hit01-05
+            currentMusic: null
+        };
+        this.initAudio();
+    }
+
+    initAudio() {
+        // Create audio elements for music
+        this.audio.intro = new Audio('assets/sounds/intro.mp3');
+        this.audio.intro.loop = true;
+        this.audio.intro.volume = 0.6;
+        
+        this.audio.menu = new Audio('assets/sounds/menu.mp3');
+        this.audio.menu.loop = true;
+        this.audio.menu.volume = 0.6;
+        
+        this.audio.warp = new Audio('assets/sounds/warp.mp3');
+        this.audio.warp.loop = false;
+        this.audio.warp.volume = 0.8;
+        
+        // Laser sound (loops while active)
+        this.audio.laser = new Audio('assets/sounds/laser.mp3');
+        this.audio.laser.loop = true;
+        this.audio.laser.volume = 0.5;
+        
+        // Hit sounds (play once on collision)
+        for (let i = 1; i <= 5; i++) {
+            const hit = new Audio(`assets/sounds/hit0${i}.mp3`);
+            hit.loop = false;
+            hit.volume = 0.7;
+            this.audio.hits.push(hit);
+        }
+        
+        console.log('Audio initialized');
+    }
+    
+    playMusic(musicName, fadeIn = false) {
+        // Stop current music if playing
+        if (this.audio.currentMusic) {
+            this.audio.currentMusic.pause();
+            this.audio.currentMusic.currentTime = 0;
+        }
+        
+        // Play new music
+        if (this.audio[musicName]) {
+            this.audio.currentMusic = this.audio[musicName];
+            
+            if (fadeIn) {
+                // Start at 0 volume and fade in
+                this.audio.currentMusic.volume = 0;
+                this.audio.currentMusic.play().catch(err => {
+                    console.log('Audio play failed (user interaction may be required):', err);
+                });
+                
+                // Fade in over 2 seconds
+                const targetVolume = musicName === 'warp' ? 0.8 : 0.6;
+                const fadeSteps = 60;
+                const fadeInterval = 2000 / fadeSteps;
+                const volumeStep = targetVolume / fadeSteps;
+                let currentStep = 0;
+                
+                const fadeIntervalId = setInterval(() => {
+                    currentStep++;
+                    if (currentStep >= fadeSteps) {
+                        this.audio.currentMusic.volume = targetVolume;
+                        clearInterval(fadeIntervalId);
+                    } else {
+                        this.audio.currentMusic.volume = volumeStep * currentStep;
+                    }
+                }, fadeInterval);
+            } else {
+                this.audio.currentMusic.play().catch(err => {
+                    console.log('Audio play failed (user interaction may be required):', err);
+                });
+            }
+            
+            console.log(`Playing music: ${musicName}${fadeIn ? ' (with fade in)' : ''}`);
+        }
+    }
+    
+    stopMusic() {
+        if (this.audio.currentMusic) {
+            this.audio.currentMusic.pause();
+            this.audio.currentMusic.currentTime = 0;
+            this.audio.currentMusic = null;
+        }
+    }
+    
+    playSound(soundName) {
+        if (this.audio[soundName]) {
+            const sound = this.audio[soundName];
+            sound.currentTime = 0;
+            sound.play().catch(err => {
+                console.log('Sound play failed:', err);
+            });
+            console.log(`Playing sound: ${soundName}`);
+        }
+    }
+    
+    startLaser() {
+        if (this.audio.laser && this.audio.laser.paused) {
+            this.audio.laser.currentTime = 0;
+            this.audio.laser.play().catch(err => {
+                console.log('Laser sound play failed:', err);
+            });
+            console.log('Laser sound started');
+        }
+    }
+    
+    stopLaser() {
+        if (this.audio.laser && !this.audio.laser.paused) {
+            this.audio.laser.pause();
+            this.audio.laser.currentTime = 0;
+            console.log('Laser sound stopped');
+        }
+    }
+    
+    playRandomHit() {
+        if (this.audio.hits.length > 0) {
+            const randomIndex = Math.floor(Math.random() * this.audio.hits.length);
+            const hitSound = this.audio.hits[randomIndex];
+            hitSound.currentTime = 0;
+            hitSound.play().catch(err => {
+                console.log('Hit sound play failed:', err);
+            });
+            console.log(`Playing hit sound ${randomIndex + 1}`);
+        }
     }
 
     async init() {
@@ -118,6 +269,9 @@ class Game {
             this.isInitialized = true;
             
             console.log('Game initialized successfully!');
+            
+            // Start intro music on menu
+            this.playMusic('intro');
             
         } catch (error) {
             console.error('Failed to initialize game:', error);
@@ -691,7 +845,13 @@ class Game {
                     position: new THREE.Vector3(5.68, 5.66, 25.35),
                     rotation: new THREE.Euler(0.000, -2.548, 0.000),
                     duration: 1.5,
-                    cameraTrack: true // camera continues tracking
+                    cameraTrack: false // camera stops tracking, stays pointed forward
+                },
+                {
+                    position: new THREE.Vector3(0, 7.5, 12),
+                    rotation: new THREE.Euler(0.000, -2.548, 0.000), // Keep same rotation, no spin
+                    duration: 1.2,
+                    cameraTrack: false // camera stays static, ship moves into cockpit view
                 }
             ],
             initialCameraPosition: new THREE.Vector3(0, 8, 15),
@@ -818,7 +978,13 @@ class Game {
                     position: new THREE.Vector3(5.68, 5.66, 25.35),
                     rotation: new THREE.Euler(0.000, -2.548, 0.000),
                     duration: 1.5,
-                    cameraTrack: true // camera continues tracking
+                    cameraTrack: false // camera stops tracking, stays pointed forward
+                },
+                {
+                    position: new THREE.Vector3(0, 7.5, 12),
+                    rotation: new THREE.Euler(0.000, -2.548, 0.000), // Keep same rotation, no spin
+                    duration: 1.2,
+                    cameraTrack: false // camera stays static, ship moves into cockpit view
                 }
             ],
             initialCameraPosition: new THREE.Vector3(0, 8, 15),
@@ -902,6 +1068,51 @@ class Game {
         requestAnimationFrame(fadeShield);
     }
     
+    triggerScreenShake(intensity, duration) {
+        // Store base camera position before shake
+        this.screenShake.basePosition.copy(this.camera.position);
+        this.screenShake.intensity = intensity;
+        this.screenShake.duration = duration;
+        this.screenShake.timer = 0;
+    }
+    
+    triggerHudImpactShake(intensity, duration) {
+        this.hudImpactShake.intensity = intensity;
+        this.hudImpactShake.duration = duration;
+        this.hudImpactShake.timer = 0;
+    }
+    
+    updateScreenShake(deltaTime) {
+        if (this.screenShake.duration <= 0) {
+            // No active shake
+            return;
+        }
+        
+        // Update shake timer
+        this.screenShake.timer += deltaTime;
+        
+        if (this.screenShake.timer >= this.screenShake.duration) {
+            // Shake complete - restore base position
+            this.screenShake.duration = 0;
+            this.screenShake.intensity = 0;
+            return;
+        }
+        
+        // Calculate shake decay (reduces over time)
+        const progress = this.screenShake.timer / this.screenShake.duration;
+        const decayFactor = 1.0 - progress; // Linear decay
+        
+        // Apply random shake offset
+        const shakeAmount = this.screenShake.intensity * decayFactor;
+        const shakeX = (Math.random() - 0.5) * shakeAmount;
+        const shakeY = (Math.random() - 0.5) * shakeAmount;
+        const shakeZ = (Math.random() - 0.5) * shakeAmount;
+        
+        this.camera.position.x = this.screenShake.basePosition.x + shakeX;
+        this.camera.position.y = this.screenShake.basePosition.y + shakeY;
+        this.camera.position.z = this.screenShake.basePosition.z + shakeZ;
+    }
+    
     createLaserBeam() {
         if (!this.ship) return;
         
@@ -955,10 +1166,12 @@ class Game {
         if (this.laserBeam) {
             this.laserBeam.visible = false;
         }
+        // Stop laser sound when laser is hidden
+        this.stopLaser();
     }
     
     createParticleExplosion(position, velocity) {
-        const particleCount = 160 + Math.floor(Math.random() * 120); // 160-280 particles
+        const particleCount = 320 + Math.floor(Math.random() * 240); // 320-560 particles (doubled!)
         const ironAmount = 0.5 + Math.random() * 1.5; // 0.5-2.0 tons per explosion
         const ironPerParticle = ironAmount / particleCount;
         
@@ -1338,6 +1551,11 @@ class Game {
         
         // Update laser targeting
         if (closestAsteroid) {
+            // Start laser sound if we're acquiring a new target
+            if (!this.currentLaserTarget) {
+                this.startLaser();
+            }
+            
             this.currentLaserTarget = closestAsteroid;
             this.updateLaserBeam(closestAsteroid.mesh);
             
@@ -1409,6 +1627,17 @@ class Game {
                 
                 // Flash the shield effect
                 this.flashShield();
+                
+                // Play random hit sound
+                this.playRandomHit();
+                
+                // Trigger screen shake (intensity based on warp speed)
+                const shakeIntensity = 0.3 + (this.shipStats.warp * 0.1); // 0.3 to ~1.0
+                this.triggerScreenShake(shakeIntensity, 0.4); // 0.4 seconds
+                
+                // Trigger HUD impact shake (more intense than screen shake)
+                const hudShakeIntensity = 15 + (this.shipStats.warp * 5); // 15 to ~70px
+                this.triggerHudImpactShake(hudShakeIntensity, 0.5); // 0.5 seconds
                 
                 // Show tutorial message on first shield hit
                 if (!this.tutorialShown.shieldHit) {
@@ -1538,10 +1767,13 @@ class Game {
             // Camera tracks ship
             this.camera.position.copy(anim.initialCameraPosition);
             this.camera.lookAt(this.ship.position);
+            // Store this look target for when tracking stops
+            anim.frozenLookAt = this.ship.position.clone();
         } else {
-            // Camera stays static
+            // Camera stays static, use frozen look target if it exists
             this.camera.position.copy(anim.initialCameraPosition);
-            this.camera.lookAt(anim.initialCameraLookAt);
+            const lookTarget = anim.frozenLookAt || anim.initialCameraLookAt;
+            this.camera.lookAt(lookTarget);
         }
         
         // Smooth transition to tracking when switching from static to tracking
@@ -1562,13 +1794,27 @@ class Game {
                 anim.startTime = this.gameState.time;
                 console.log('Animation looping - restarting');
             } else {
-                anim.isAnimating = false;
+            anim.isAnimating = false;
                 this.shipDebugMode = true; // Enable manual controls
+                
+                // Store camera's fixed rotation (lock it in place)
+                if (!this.cameraFixedRotation) {
+                    this.cameraFixedRotation = {
+                        x: this.camera.rotation.x,
+                        y: this.camera.rotation.y,
+                        z: this.camera.rotation.z
+                    };
+                    console.log('Camera rotation locked:', this.cameraFixedRotation);
+                }
+                
                 this.showUIPanel(); // Show UI panel
+                
+                // Start intro music with fade in for gameplay
+                this.playMusic('intro', true);
                 
                 // Show controls hint
                 if (!this.tutorialShown.controls) {
-                    this.showTutorialMessage("WASD controls / ARROW keys for acceleration / SPACEBAR for hyperjump", 'warning', 7000);
+                    this.showTutorialMessage("WASD controls --- ARROW keys for acceleration --- SPACEBAR for hyperjump", 'warning', 7000);
                     this.tutorialShown.controls = true;
                 }
                 
@@ -1703,6 +1949,12 @@ class Game {
     startShipFlyIn() {
         if (!this.ship || this.shipAnimation.isAnimating) return;
         
+        // Stop intro music when game starts
+        this.stopMusic();
+        
+        // Play warp sound at the start of the animation
+        this.playSound('warp');
+        
         this.shipAnimation.isAnimating = true;
         this.shipAnimation.startTime = this.gameState.time;
         this.shipAnimation.currentWaypoint = 0;
@@ -1818,12 +2070,31 @@ class Game {
         
         // Update ship - use animation or manual controls based on debug mode
         if (!this.shipDebugMode) {
-            this.updateShipAnimation(deltaTime);
+        this.updateShipAnimation(deltaTime);
         } else {
             this.updateShipDebugControls(deltaTime);
-            // Camera moves with ship and continues tracking it
-            this.camera.lookAt(this.ship.position);
+            // Camera maintains fixed forward direction (no rotation)
+            if (this.cameraFixedRotation) {
+                this.camera.rotation.x = this.cameraFixedRotation.x;
+                this.camera.rotation.y = this.cameraFixedRotation.y;
+                this.camera.rotation.z = this.cameraFixedRotation.z;
+            }
+            
+            // Add ambient screen shake that intensifies as event horizon approaches
+            if (this.shipStats.distance < 50 && this.screenShake.duration <= 0) {
+                // Calculate ambient shake intensity based on distance (0-50 range)
+                // At 50 clicks: very subtle (0.05)
+                // At 0 clicks: intense (0.8)
+                const distanceRatio = 1.0 - (this.shipStats.distance / 50);
+                const ambientShake = 0.05 + (distanceRatio * 0.75);
+                
+                // Trigger continuous low-frequency shake
+                this.triggerScreenShake(ambientShake, 0.15);
+            }
         }
+        
+        // Update screen shake effect
+        this.updateScreenShake(deltaTime);
         
         // Update fuel consumption and distance (runs every second when ship is under manual control)
         if (this.shipDebugMode) {
@@ -1835,8 +2106,9 @@ class Game {
                 const fuelConsumption = baseFuelConsumption * (1 - fuelReduction);
                 this.shipStats.fuel = Math.max(0, this.shipStats.fuel - fuelConsumption);
                 
-                // Update distance based on warp difference from equilibrium
-                const warpDifference = this.shipStats.warp - this.equilibriumWarp;
+                // Update distance based on warp difference from current equilibrium (affected by cargo drag)
+                const currentEquilibrium = this.getCurrentEquilibrium();
+                const warpDifference = this.shipStats.warp - currentEquilibrium;
                 this.shipStats.distance = Math.max(0, this.shipStats.distance + warpDifference);
                 
                 this.fuelConsumptionTimer = 0;
@@ -1930,6 +2202,9 @@ class Game {
             
             // Update red screen overlay (progressive red when distance < 20)
             this.updateDangerOverlay();
+            
+            // Update HUD jitter and blink effects
+            this.updateHudEffects();
         }
     }
 
@@ -1960,7 +2235,7 @@ class Game {
         
         if (this.shipDebugMode) {
             console.log('Ship Debug Mode ENABLED');
-            console.log('Controls: WASD = Move, Q/E = Up/Down, Arrow Keys = Rotate, R = Reset');
+            console.log('Controls: WASD = Move, Arrow Keys = Adjust Warp, Spacebar = Hyperjump');
             console.log('Current Position:', this.ship.position);
             console.log('Current Rotation:', this.ship.rotation);
         } else {
@@ -1971,18 +2246,7 @@ class Game {
     updateShipDebugControls(deltaTime) {
         if (!this.ship) return;
         
-        // Store home rotation on first call
-        if (!this.shipHomeRotation) {
-            this.shipHomeRotation = {
-                x: this.ship.rotation.x,
-                y: this.ship.rotation.y,
-                z: this.ship.rotation.z
-            };
-        }
-        
         const moveSpeed = 10 * deltaTime; // units per second
-        const rotationAmount = 0.3; // Maximum rotation in radians
-        const rotationSpeed = 8.0; // How fast to interpolate rotation
         
         // Get camera's right and up vectors for screen-space movement
         const cameraDirection = new THREE.Vector3();
@@ -1996,33 +2260,21 @@ class Game {
         // Movement controls based on screen coordinates (WASD)
         const movement = new THREE.Vector3();
         
-        // Target rotation offsets from home position
-        let targetPitch = 0; // X-axis rotation
-        let targetRoll = 0;  // Z-axis rotation
-        
         if (this.inputHandler.isKeyPressed('KeyW')) {
             // Move up on screen (world Y-axis up)
             movement.add(cameraUp.clone().multiplyScalar(moveSpeed));
-            // Tilt nose up
-            targetPitch = -rotationAmount;
         }
         if (this.inputHandler.isKeyPressed('KeyS')) {
             // Move down on screen (world Y-axis down)
             movement.add(cameraUp.clone().multiplyScalar(-moveSpeed));
-            // Tilt nose down
-            targetPitch = rotationAmount;
         }
         if (this.inputHandler.isKeyPressed('KeyA')) {
             // Move left on screen
             movement.add(cameraRight.clone().multiplyScalar(moveSpeed));
-            // Bank left
-            targetRoll = rotationAmount;
         }
         if (this.inputHandler.isKeyPressed('KeyD')) {
             // Move right on screen
             movement.add(cameraRight.clone().multiplyScalar(-moveSpeed));
-            // Bank right
-            targetRoll = -rotationAmount;
         }
         
         // Warp control with arrow keys
@@ -2039,20 +2291,10 @@ class Game {
         this.ship.position.add(movement);
         this.camera.position.add(movement);
         
-        // Smoothly interpolate ship rotation
-        const targetRotationX = this.shipHomeRotation.x + targetPitch;
-        const targetRotationZ = this.shipHomeRotation.z + targetRoll;
-        
-        this.ship.rotation.x = THREE.MathUtils.lerp(
-            this.ship.rotation.x,
-            targetRotationX,
-            rotationSpeed * deltaTime
-        );
-        this.ship.rotation.z = THREE.MathUtils.lerp(
-            this.ship.rotation.z,
-            targetRotationZ,
-            rotationSpeed * deltaTime
-        );
+        // Update shake base position when moving (if shake is active)
+        if (this.screenShake.duration > 0) {
+            this.screenShake.basePosition.add(movement);
+        }
     }
 
     updateDebugInfo() {
@@ -2133,6 +2375,10 @@ class Game {
         console.log('Game Over! Consumed by the black hole.');
         this.isGameOver = true;
         this.stop();
+        
+        // Stop gameplay music and laser sound
+        this.stopMusic();
+        this.stopLaser();
         
         // Disable pointer lock so cursor is visible for clicking
         if (this.inputHandler) {
@@ -2219,7 +2465,7 @@ class Game {
         this.debrisParticles = [];
         console.log('All debris particles removed');
         
-        // Hide laser beam
+        // Hide laser beam and stop laser sound
         this.hideLaserBeam();
         this.currentLaserTarget = null;
         
@@ -2246,14 +2492,71 @@ class Game {
         // Disable manual controls
         this.shipDebugMode = false;
         
-        // Clear ship home rotation
-        this.shipHomeRotation = null;
+        // Clear camera fixed rotation
+        this.cameraFixedRotation = null;
+        
+        // Reset screen shake
+        this.screenShake.duration = 0;
+        this.screenShake.intensity = 0;
+        this.screenShake.timer = 0;
+        
+        // Reset HUD impact shake
+        this.hudImpactShake.duration = 0;
+        this.hudImpactShake.intensity = 0;
+        this.hudImpactShake.timer = 0;
+        
+        // Reset tutorial flags
+        this.tutorialShown.shieldHit = false;
+        this.tutorialShown.asteroidDestroyed = false;
+        this.tutorialShown.cargoFull = false;
+        this.tutorialShown.controls = false;
+        this.dangerWarningShown = false;
         
         // Hide UI elements
         this.hideUIPanel();
         
+        // Reset HUD effects (transforms and clear inline opacity styles)
+        const hudBars = document.getElementById('hud-bars');
+        const distanceDisplay = document.getElementById('distance-display');
+        const blackHud = document.getElementById('black-hud');
+        
+        if (hudBars) {
+            hudBars.style.transform = 'translateY(0)';
+        }
+        if (distanceDisplay) {
+            distanceDisplay.style.transform = 'translateY(0)';
+            distanceDisplay.style.opacity = ''; // Clear inline style - let CSS class control visibility
+        }
+        if (blackHud) {
+            blackHud.style.transform = 'translateY(0)';
+        }
+        
+        // Reset value opacity
+        const warpValue = document.getElementById('value-warp');
+        const fuelValue = document.getElementById('value-fuel');
+        const ironValue = document.getElementById('value-iron');
+        
+        if (warpValue) warpValue.style.opacity = '1.0';
+        if (fuelValue) fuelValue.style.opacity = '1.0';
+        if (ironValue) ironValue.style.opacity = '1.0';
+        
+        // Reset danger overlay
+        const dangerOverlay = document.getElementById('danger-overlay');
+        if (dangerOverlay) {
+            dangerOverlay.style.opacity = 0;
+        }
+        
+        // Hide tutorial messages
+        const tutorialMessage = document.getElementById('tutorial-message');
+        if (tutorialMessage) {
+            tutorialMessage.style.display = 'none';
+        }
+        
         // Force a render to show the reset scene
         this.render();
+        
+        // Restart intro music for menu
+        this.playMusic('intro');
         
         console.log('Game reset complete');
     }
@@ -2294,6 +2597,108 @@ class Game {
         } else {
             overlayEl.style.opacity = 0;
         }
+    }
+    
+    updateHudEffects() {
+        const distance = this.shipStats.distance;
+        const hudBars = document.getElementById('hud-bars');
+        const distanceDisplay = document.getElementById('distance-display');
+        const blackHud = document.getElementById('black-hud');
+        
+        if (!hudBars || !distanceDisplay) return;
+        
+        // Calculate impact shake offset (if active)
+        let impactShakeY = 0;
+        if (this.hudImpactShake.duration > 0) {
+            // Update impact shake timer
+            this.hudImpactShake.timer += 0.016; // Approximate deltaTime
+            
+            if (this.hudImpactShake.timer >= this.hudImpactShake.duration) {
+                // Impact shake complete
+                this.hudImpactShake.duration = 0;
+                this.hudImpactShake.intensity = 0;
+            } else {
+                // Calculate decay
+                const progress = this.hudImpactShake.timer / this.hudImpactShake.duration;
+                const decayFactor = 1.0 - progress;
+                
+                // Random shake offset
+                const shakeAmount = this.hudImpactShake.intensity * decayFactor;
+                impactShakeY = (Math.random() - 0.5) * shakeAmount;
+            }
+        }
+        
+        // Start distance-based effects when distance < 50
+        if (distance < 50) {
+            // Calculate intensity (0 to 1, where 1 is most intense at distance 0)
+            const intensity = 1.0 - (distance / 50);
+            
+            // Jitter/shake effect - vertical offset
+            const jitterAmount = intensity * 10; // Max 10px jitter at distance 0
+            const jitterY = (Math.random() - 0.5) * jitterAmount;
+            
+            // Combine distance jitter with impact shake
+            const totalShakeY = jitterY + impactShakeY;
+            
+            // Apply combined shake to all HUD elements
+            hudBars.style.transform = `translateY(${totalShakeY}px)`;
+            distanceDisplay.style.transform = `translateY(${totalShakeY}px)`;
+            if (blackHud) {
+                blackHud.style.transform = `translateY(${totalShakeY}px)`;
+            }
+            
+            // Blinking effect for readouts when distance < 30
+            if (distance < 30) {
+                const blinkIntensity = 1.0 - (distance / 30);
+                // Random chance to blink based on intensity
+                const shouldBlink = Math.random() < (blinkIntensity * 0.3); // Up to 30% chance per frame
+                
+                const warpValue = document.getElementById('value-warp');
+                const fuelValue = document.getElementById('value-fuel');
+                const ironValue = document.getElementById('value-iron');
+                
+                if (shouldBlink) {
+                    // Flash elements to 30% opacity
+                    if (warpValue) warpValue.style.opacity = '0.3';
+                    if (fuelValue) fuelValue.style.opacity = '0.3';
+                    if (ironValue) ironValue.style.opacity = '0.3';
+                    if (distanceDisplay) distanceDisplay.style.opacity = '0.3';
+                } else {
+                    // Restore full opacity
+                    if (warpValue) warpValue.style.opacity = '1.0';
+                    if (fuelValue) fuelValue.style.opacity = '1.0';
+                    if (ironValue) ironValue.style.opacity = '1.0';
+                    if (distanceDisplay) distanceDisplay.style.opacity = '1.0';
+                }
+            }
+        } else {
+            // No distance-based jitter, but still apply impact shake if active
+            hudBars.style.transform = `translateY(${impactShakeY}px)`;
+            distanceDisplay.style.transform = `translateY(${impactShakeY}px)`;
+            if (blackHud) {
+                blackHud.style.transform = `translateY(${impactShakeY}px)`;
+            }
+            
+            const warpValue = document.getElementById('value-warp');
+            const fuelValue = document.getElementById('value-fuel');
+            const ironValue = document.getElementById('value-iron');
+            
+            if (warpValue) warpValue.style.opacity = '1.0';
+            if (fuelValue) fuelValue.style.opacity = '1.0';
+            if (ironValue) ironValue.style.opacity = '1.0';
+            distanceDisplay.style.opacity = '1.0';
+        }
+    }
+    
+    // Cargo Drag System
+    getCurrentEquilibrium() {
+        // Calculate equilibrium warp based on cargo load
+        // Empty cargo: base equilibrium (2.2 warp)
+        // Full cargo: base + maxCargoDrag (8.0 warp)
+        // This creates significant pressure to jump to station before cargo fills!
+        const cargoRatio = this.shipStats.iron / this.shipStats.cargoMax;
+        const cargoDrag = cargoRatio * this.maxCargoDrag;
+        return this.baseEquilibriumWarp + cargoDrag;
     }
     
     // Upgrade Multiplier Helpers
@@ -2383,6 +2788,9 @@ class Game {
         // Pause game
         this.stop();
         
+        // Stop laser sound if active
+        this.stopLaser();
+        
         // Disable pointer lock
         if (this.inputHandler) {
             this.inputHandler.disablePointerLock();
@@ -2421,6 +2829,9 @@ class Game {
         if (modal) {
             modal.classList.add('show');
         }
+        
+        // Play menu music
+        this.playMusic('menu');
         
         // Setup tab switching
         this.setupStationTabs();
@@ -2477,6 +2888,11 @@ class Game {
         this.tutorialShown.controls = false;
         this.dangerWarningShown = false;
         
+        // Reset HUD impact shake
+        this.hudImpactShake.duration = 0;
+        this.hudImpactShake.intensity = 0;
+        this.hudImpactShake.timer = 0;
+        
         // Hide any visible messages
         const messageEl = document.getElementById('tutorial-message');
         if (messageEl) {
@@ -2489,11 +2905,45 @@ class Game {
             overlayEl.style.opacity = 0;
         }
         
+        // Reset HUD effects (transforms and opacity)
+        const hudBars = document.getElementById('hud-bars');
+        const distanceDisplay = document.getElementById('distance-display');
+        const blackHud = document.getElementById('black-hud');
+        
+        if (hudBars) {
+            hudBars.style.transform = 'translateY(0)';
+        }
+        if (distanceDisplay) {
+            distanceDisplay.style.transform = 'translateY(0)';
+            distanceDisplay.style.opacity = '1.0';
+        }
+        if (blackHud) {
+            blackHud.style.transform = 'translateY(0)';
+        }
+        
+        // Reset value opacity
+        const warpValue = document.getElementById('value-warp');
+        const fuelValue = document.getElementById('value-fuel');
+        const ironValue = document.getElementById('value-iron');
+        
+        if (warpValue) warpValue.style.opacity = '1.0';
+        if (fuelValue) fuelValue.style.opacity = '1.0';
+        if (ironValue) ironValue.style.opacity = '1.0';
+        
         // Update HUD to show new values
         this.updateHudBars();
         this.updateDistanceDisplay();
         
         console.log('New mission started: Fuel refilled, distance reset to 100 clicks');
+        
+        // Stop menu music and play warp sound when returning to gameplay
+        this.stopMusic();
+        this.playSound('warp');
+        
+        // Start intro music for gameplay after a brief delay (let warp sound play)
+        setTimeout(() => {
+            this.playMusic('intro', true);
+        }, 500);
         
         // Resume game
         this.start();
